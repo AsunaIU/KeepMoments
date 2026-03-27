@@ -56,7 +56,7 @@ class BookCreationViewModel(
                 it.copy(
                     isLoading = false,
                     errorMessage = if (result.isSuccess) {
-                        "Следующий шаг пока не реализован"
+                        "Дальше еще не готово"
                     } else {
                         result.exceptionOrNull()?.localizedMessage ?: "Что-то пошло не так"
                     }
