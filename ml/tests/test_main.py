@@ -1,10 +1,11 @@
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app.config import Settings, get_settings
+from app.dependencies import get_clip_model_dep
 from app.main import app
 from app.schemas import FilledPage, FilledSlot, FilledTemplate
 from tests.conftest import make_template
@@ -35,10 +36,16 @@ _FILLED = FilledTemplate(
 )
 
 
+_MOCK_CLIP = (MagicMock(), MagicMock())
+
+
 @pytest.fixture
 def client():
     app.dependency_overrides[get_settings] = lambda: _SETTINGS
-    yield TestClient(app)
+    app.dependency_overrides[get_clip_model_dep] = lambda: _MOCK_CLIP
+    with patch("app.main.get_clip_model", return_value=_MOCK_CLIP):
+        with TestClient(app) as c:
+            yield c
     app.dependency_overrides.clear()
 
 

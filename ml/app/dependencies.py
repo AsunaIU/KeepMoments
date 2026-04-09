@@ -1,8 +1,12 @@
 import boto3
 from botocore.config import Config
-from fastapi import Depends
+from fastapi import Depends, Request
 
 from app.config import Settings, get_settings
+
+
+def get_clip_model_dep(request: Request):
+    return request.app.state.clip_model, request.app.state.clip_preprocess
 
 
 def get_s3_client(settings: Settings = Depends(get_settings)):

@@ -36,9 +36,7 @@ def _pipeline_patch_stack(overrides: dict | None = None):
     The stack must be used as a context manager to ensure cleanup.
     """
     defaults = {
-        "app.pipeline.boto3": MagicMock(),
         "app.pipeline.download_photos": MagicMock(return_value=_PHOTO_BYTES),
-        "app.pipeline.get_clip_model": MagicMock(return_value=(MagicMock(), MagicMock())),
         "app.pipeline.extract_embeddings": MagicMock(return_value=_EMBEDDINGS),
         "app.pipeline.cluster_photos": MagicMock(return_value={0: list(_PHOTO_BYTES)}),
         "app.pipeline.score_quality": MagicMock(return_value={"p1": 0.8, "p2": 0.6}),
@@ -66,7 +64,7 @@ def test_happy_path_returns_filled_template():
     request = make_process_request(photo_ids=["p1", "p2"], min_photos=1, max_photos=5)
     stack, _ = _pipeline_patch_stack()
     with stack:
-        result = _run_pipeline_sync(request, _make_settings())
+        result = _run_pipeline_sync(request, _make_settings(), MagicMock(), MagicMock(), MagicMock())
     assert result is _FILLED
 
 
@@ -76,7 +74,7 @@ def test_no_photos_downloaded_raises_503():
     with stack:
         mocks["download_photos"].return_value = {}
         with pytest.raises(HTTPException) as exc_info:
-            _run_pipeline_sync(request, _make_settings())
+            _run_pipeline_sync(request, _make_settings(), MagicMock(), MagicMock(), MagicMock())
     assert exc_info.value.status_code == 503
 
 
@@ -87,7 +85,7 @@ def test_fewer_photos_than_min_raises_422():
     with stack:
         mocks["download_photos"].return_value = {"p1": b"x", "p2": b"y"}
         with pytest.raises(HTTPException) as exc_info:
-            _run_pipeline_sync(request, _make_settings())
+            _run_pipeline_sync(request, _make_settings(), MagicMock(), MagicMock(), MagicMock())
     assert exc_info.value.status_code == 422
     assert "min_photos" in exc_info.value.detail
 
@@ -98,7 +96,7 @@ def test_no_template_slots_raises_422():
     with stack:
         mocks["count_template_slots"].return_value = 0
         with pytest.raises(HTTPException) as exc_info:
-            _run_pipeline_sync(request, _make_settings())
+            _run_pipeline_sync(request, _make_settings(), MagicMock(), MagicMock(), MagicMock())
     assert exc_info.value.status_code == 422
 
 
@@ -115,7 +113,7 @@ def test_n_select_capped_at_available_photos():
         mocks["extract_embeddings"].return_value = {k: np.zeros(512) for k in available}
         mocks["cluster_photos"].return_value = {0: list(available)}
         mocks["count_template_slots"].return_value = 50
-        _run_pipeline_sync(request, _make_settings())
+        _run_pipeline_sync(request, _make_settings(), MagicMock(), MagicMock(), MagicMock())
         pos_args, _ = mocks["select_photos"].call_args
         n_select_used = pos_args[2]
     assert n_select_used == 3
@@ -127,7 +125,7 @@ def test_fill_template_receives_reranked_photos():
     stack, mocks = _pipeline_patch_stack()
     with stack:
         mocks["rerank_by_text"].return_value = reranked
-        _run_pipeline_sync(request, _make_settings())
+        _run_pipeline_sync(request, _make_settings(), MagicMock(), MagicMock(), MagicMock())
         pos_args, _ = mocks["fill_template"].call_args
     assert pos_args[1] == reranked
 
@@ -138,7 +136,7 @@ def test_download_called_with_correct_bucket():
     settings.S3_BUCKET_NAME = "expected-bucket"
     stack, mocks = _pipeline_patch_stack()
     with stack:
-        _run_pipeline_sync(request, settings)
+        _run_pipeline_sync(request, settings, MagicMock(), MagicMock(), MagicMock())
         _, call_kwargs = mocks["download_photos"].call_args
         bucket_used = call_kwargs.get("bucket") or mocks["download_photos"].call_args[0][1]
     assert bucket_used == "expected-bucket"
@@ -150,7 +148,10 @@ def test_download_called_with_correct_bucket():
 
 async def test_run_pipeline_async_wrapper(mock_settings):
     request = make_process_request()
+    mock_s3 = MagicMock()
+    mock_model = MagicMock()
+    mock_preprocess = MagicMock()
     with patch("app.pipeline._run_pipeline_sync", return_value=_FILLED) as mock_sync:
-        result = await run_pipeline(request, mock_settings)
+        result = await run_pipeline(request, mock_settings, mock_s3, mock_model, mock_preprocess)
     assert result is _FILLED
-    mock_sync.assert_called_once_with(request, mock_settings)
+    mock_sync.assert_called_once_with(request, mock_settings, mock_s3, mock_model, mock_preprocess)
