@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     AWS_SECRET_ACCESS_KEY: str
     AWS_REGION: str = "us-east-1"
     S3_BUCKET_NAME: str
+    S3_ENDPOINT_URL: str | None = None  # set to http://minio:9000 for local
 
     CLIP_MODEL_NAME: str = "ViT-B/32"
     KMEANS_RANDOM_STATE: int = 42

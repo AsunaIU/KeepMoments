@@ -1,13 +1,16 @@
 import logging
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 
 logger = logging.getLogger(__name__)
+
+_DEFAULT_TIMEOUT = 30.0  # seconds per photo
 
 
 def download_photos(
     photo_ids: list[str],
     bucket: str,
     s3_client,
+    timeout: float = _DEFAULT_TIMEOUT,
 ) -> dict[str, bytes]:
     def fetch(photo_id: str) -> tuple[str, bytes | None]:
         try:
@@ -17,7 +20,16 @@ def download_photos(
             logger.warning("Failed to download photo %s: %s", photo_id, exc)
             return photo_id, None
 
+    results: dict[str, bytes] = {}
     with ThreadPoolExecutor() as pool:
-        results = list(pool.map(fetch, photo_ids))
-
-    return {pid: data for pid, data in results if data is not None}
+        futures = {pool.submit(fetch, pid): pid for pid in photo_ids}
+        for future, pid in futures.items():
+            try:
+                photo_id, data = future.result(timeout=timeout)
+                if data is not None:
+                    results[photo_id] = data
+            except FuturesTimeoutError:
+                logger.warning(
+                    "Timeout downloading photo %s after %.1f seconds", pid, timeout
+                )
+    return results
