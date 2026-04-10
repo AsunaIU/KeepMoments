@@ -10,6 +10,7 @@ type Config struct {
 	HTTPPort string
 	Postgres PostgresConfig
 	S3       S3Config
+	Auth     AuthConfig
 }
 
 type PostgresConfig struct {
@@ -28,6 +29,12 @@ type S3Config struct {
 	AccessKey string
 	SecretKey string
 	PathStyle bool
+}
+
+type AuthConfig struct {
+	JWTSecret           string
+	AccessTokenTTLMin   int
+	RefreshTokenTTLHour int
 }
 
 func Load() (Config, error) {
@@ -49,6 +56,11 @@ func Load() (Config, error) {
 			AccessKey: getEnv("S3_ACCESS_KEY", "minioadmin"),
 			SecretKey: getEnv("S3_SECRET_KEY", "minioadmin"),
 			PathStyle: getEnv("S3_USE_PATH_STYLE", "true") == "true",
+		},
+		Auth: AuthConfig{
+			JWTSecret:           getEnv("AUTH_JWT_SECRET", "super-secret-change-me"),
+			AccessTokenTTLMin:   getEnvAsInt("AUTH_ACCESS_TOKEN_TTL_MINUTES", 15),
+			RefreshTokenTTLHour: getEnvAsInt("AUTH_REFRESH_TOKEN_TTL_HOURS", 720),
 		},
 	}
 
@@ -80,6 +92,10 @@ func (c Config) Validate() error {
 		return fmt.Errorf("s3 config is incomplete")
 	}
 
+	if c.Auth.JWTSecret == "" {
+		return fmt.Errorf("auth config is incomplete")
+	}
+
 	return nil
 }
 
@@ -89,4 +105,19 @@ func getEnv(key, fallback string) string {
 	}
 
 	return fallback
+}
+
+func getEnvAsInt(key string, fallback int) int {
+	value := getEnv(key, "")
+	if value == "" {
+		return fallback
+	}
+
+	var parsed int
+	_, err := fmt.Sscanf(value, "%d", &parsed)
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+
+	return parsed
 }

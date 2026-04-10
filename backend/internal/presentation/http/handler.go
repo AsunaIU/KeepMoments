@@ -19,19 +19,153 @@ const maxPhotoSize = 10 << 20
 type Handler struct {
 	templateService *logic.TemplateService
 	photoService    *logic.PhotoService
+	authService     *logic.AuthService
+	tokenService    *logic.TokenService
 	logger          *slog.Logger
 }
 
-func NewHandler(templateService *logic.TemplateService, photoService *logic.PhotoService, logger *slog.Logger) *Handler {
+func NewHandler(
+	templateService *logic.TemplateService,
+	photoService *logic.PhotoService,
+	authService *logic.AuthService,
+	tokenService *logic.TokenService,
+	logger *slog.Logger,
+) *Handler {
 	return &Handler{
 		templateService: templateService,
 		photoService:    photoService,
+		authService:     authService,
+		tokenService:    tokenService,
 		logger:          logger,
 	}
 }
 
+// Health godoc
+// @Summary Health check
+// @Tags system
+// @Produce json
+// @Success 200 {object} HealthResponse
+// @Router /health [get]
 func (h *Handler) Health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+type authRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type refreshRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
+// Register godoc
+// @Summary Register user
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body AuthRequest true "Credentials"
+// @Success 201 {object} logic.AuthResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /api/v1/auth/register [post]
+func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
+	var req authRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+
+	result, err := h.authService.Register(r.Context(), logic.RegisterInput{
+		Email:    req.Email,
+		Password: req.Password,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, logic.ErrInvalidCredentialsInput):
+			writeError(w, http.StatusBadRequest, err.Error())
+		case errors.Is(err, repository.ErrUserAlreadyExists):
+			writeError(w, http.StatusConflict, "user already exists")
+		default:
+			h.logger.Error("register failed", "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to register")
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, result)
+}
+
+// Login godoc
+// @Summary Login user
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body AuthRequest true "Credentials"
+// @Success 200 {object} logic.AuthResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /api/v1/auth/login [post]
+func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
+	var req authRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+
+	result, err := h.authService.Login(r.Context(), logic.LoginInput{
+		Email:    req.Email,
+		Password: req.Password,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, logic.ErrInvalidCredentialsInput):
+			writeError(w, http.StatusBadRequest, err.Error())
+		case errors.Is(err, repository.ErrInvalidCredentials):
+			writeError(w, http.StatusUnauthorized, "invalid email or password")
+		default:
+			h.logger.Error("login failed", "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to login")
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}
+
+// Refresh godoc
+// @Summary Refresh tokens
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body RefreshRequest true "Refresh token"
+// @Success 200 {object} logic.AuthResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /api/v1/auth/refresh [post]
+func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
+	var req refreshRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+
+	result, err := h.authService.Refresh(r.Context(), req.RefreshToken)
+	if err != nil {
+		switch {
+		case errors.Is(err, logic.ErrInvalidRefreshToken):
+			writeError(w, http.StatusUnauthorized, "invalid refresh token")
+		default:
+			h.logger.Error("refresh failed", "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to refresh token")
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
 }
 
 type createTemplateRequest struct {
@@ -39,6 +173,18 @@ type createTemplateRequest struct {
 	DescriptionJSON json.RawMessage `json:"description_json"`
 }
 
+// CreateTemplate godoc
+// @Summary Create template
+// @Tags templates
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body CreateTemplateRequest true "Template payload"
+// @Success 201 {object} logic.TemplateDetails
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /api/v1/templates [post]
 func (h *Handler) CreateTemplate(w http.ResponseWriter, r *http.Request) {
 	var req createTemplateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -70,6 +216,15 @@ func (h *Handler) CreateTemplate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, template)
 }
 
+// ListTemplates godoc
+// @Summary List templates
+// @Tags templates
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {array} logic.TemplateDetails
+// @Failure 401 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /api/v1/templates [get]
 func (h *Handler) ListTemplates(w http.ResponseWriter, r *http.Request) {
 	templates, err := h.templateService.List(r.Context())
 	if err != nil {
@@ -81,6 +236,18 @@ func (h *Handler) ListTemplates(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, templates)
 }
 
+// GetTemplate godoc
+// @Summary Get template
+// @Tags templates
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "Template ID"
+// @Success 200 {object} logic.TemplateDetails
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /api/v1/templates/{id} [get]
 func (h *Handler) GetTemplate(w http.ResponseWriter, r *http.Request) {
 	id, err := parseInt64Path(r, "id")
 	if err != nil {
@@ -103,6 +270,19 @@ func (h *Handler) GetTemplate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, template)
 }
 
+// DeleteTemplate godoc
+// @Summary Delete template
+// @Tags templates
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "Template ID"
+// @Success 204 {string} string "No Content"
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /api/v1/templates/{id} [delete]
 func (h *Handler) DeleteTemplate(w http.ResponseWriter, r *http.Request) {
 	id, err := parseInt64Path(r, "id")
 	if err != nil {
@@ -128,6 +308,20 @@ func (h *Handler) DeleteTemplate(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// CreatePhoto godoc
+// @Summary Upload photo
+// @Tags photos
+// @Accept multipart/form-data
+// @Produce json
+// @Security BearerAuth
+// @Param template_id formData int true "Template ID"
+// @Param description_json formData string false "Photo description JSON"
+// @Param file formData file true "Photo file"
+// @Success 201 {object} logic.PhotoDetails
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /api/v1/photos [post]
 func (h *Handler) CreatePhoto(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseMultipartForm(maxPhotoSize); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid multipart form")
@@ -195,6 +389,18 @@ func (h *Handler) CreatePhoto(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, photo)
 }
 
+// GetPhoto godoc
+// @Summary Get photo metadata
+// @Tags photos
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "Photo ID"
+// @Success 200 {object} logic.PhotoDetails
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /api/v1/photos/{id} [get]
 func (h *Handler) GetPhoto(w http.ResponseWriter, r *http.Request) {
 	id, err := parseInt64Path(r, "id")
 	if err != nil {
@@ -217,6 +423,18 @@ func (h *Handler) GetPhoto(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, photo)
 }
 
+// DeletePhoto godoc
+// @Summary Delete photo
+// @Tags photos
+// @Produce json
+// @Security BearerAuth
+// @Param id path int true "Photo ID"
+// @Success 204 {string} string "No Content"
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /api/v1/photos/{id} [delete]
 func (h *Handler) DeletePhoto(w http.ResponseWriter, r *http.Request) {
 	id, err := parseInt64Path(r, "id")
 	if err != nil {

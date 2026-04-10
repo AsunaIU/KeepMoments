@@ -49,7 +49,7 @@ type PhotoDetails struct {
 	FileName        string          `json:"file_name"`
 	ContentType     string          `json:"content_type"`
 	ObjectKey       string          `json:"object_key"`
-	DescriptionJSON json.RawMessage `json:"description_json"`
+	DescriptionJSON json.RawMessage `json:"description_json" swaggertype:"string" example:"{\"camera\":\"iphone\",\"tags\":[\"travel\"]}"`
 	CreatedAt       time.Time       `json:"created_at"`
 }
 

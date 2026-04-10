@@ -31,7 +31,7 @@ type CreateTemplateInput struct {
 type TemplateDetails struct {
 	ID              int64           `json:"id"`
 	Name            string          `json:"name"`
-	DescriptionJSON json.RawMessage `json:"description_json"`
+	DescriptionJSON json.RawMessage `json:"description_json" swaggertype:"string" example:"{\"layout\":\"story\",\"ratio\":\"9:16\"}"`
 	CreatedAt       time.Time       `json:"created_at"`
 }
 

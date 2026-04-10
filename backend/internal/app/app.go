@@ -53,9 +53,13 @@ func New(ctx context.Context) (*App, error) {
 
 	templateRepo := repository.NewTemplateRepository(pg.Pool)
 	photoRepo := repository.NewPhotoRepository(pg.Pool)
+	userRepo := repository.NewUserRepository(pg.Pool)
+	refreshTokenRepo := repository.NewRefreshTokenRepository(pg.Pool)
 	templateService := logic.NewTemplateService(templateRepo)
 	photoService := logic.NewPhotoService(photoRepo, s3Client.Storage)
-	handler := httptransport.NewHandler(templateService, photoService, logger)
+	tokenService := logic.NewTokenService(cfg.Auth, refreshTokenRepo)
+	authService := logic.NewAuthService(userRepo, tokenService)
+	handler := httptransport.NewHandler(templateService, photoService, authService, tokenService, logger)
 
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%s", cfg.HTTPPort),
