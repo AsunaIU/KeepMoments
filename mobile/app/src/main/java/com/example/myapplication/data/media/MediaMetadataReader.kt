@@ -1,6 +1,7 @@
 package com.example.myapplication.data.media
 
 import android.content.ContentResolver
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.provider.OpenableColumns
 
@@ -11,7 +12,9 @@ interface MediaMetadataReader {
 data class MediaMetadata(
     val displayName: String?,
     val mimeType: String?,
-    val sizeBytes: Long?
+    val sizeBytes: Long?,
+    val width: Int?,
+    val height: Int?
 )
 
 class AndroidMediaMetadataReader(
@@ -42,10 +45,22 @@ class AndroidMediaMetadataReader(
             }
         }
 
+        val bounds = BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
+        contentResolver.openInputStream(uri)?.use { inputStream ->
+            BitmapFactory.decodeStream(inputStream, null, bounds)
+        }
+
+        val width = bounds.outWidth.takeIf { it > 0 }
+        val height = bounds.outHeight.takeIf { it > 0 }
+
         return MediaMetadata(
             displayName = displayName,
             mimeType = contentResolver.getType(uri),
-            sizeBytes = sizeBytes
+            sizeBytes = sizeBytes,
+            width = width,
+            height = height
         )
     }
 }
