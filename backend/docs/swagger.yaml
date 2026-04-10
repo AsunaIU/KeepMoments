@@ -1,0 +1,459 @@
+basePath: /
+definitions:
+  internal_presentation_http.AuthRequest:
+    properties:
+      email:
+        example: user@example.com
+        type: string
+      password:
+        example: secret123
+        type: string
+    type: object
+  internal_presentation_http.CreateTemplateRequest:
+    properties:
+      description_json:
+        example: '{"layout":"story","ratio":"9:16"}'
+        type: string
+      name:
+        example: basic
+        type: string
+    type: object
+  internal_presentation_http.ErrorResponse:
+    properties:
+      error:
+        example: invalid json body
+        type: string
+    type: object
+  internal_presentation_http.HealthResponse:
+    properties:
+      status:
+        example: ok
+        type: string
+    type: object
+  internal_presentation_http.RefreshRequest:
+    properties:
+      refresh_token:
+        example: g1A2b3C4d5E6f7G8
+        type: string
+    type: object
+  keepmoments_backend_internal_logic.AuthResponse:
+    properties:
+      access_expires_at:
+        type: string
+      access_token:
+        type: string
+      email:
+        type: string
+      refresh_expires_at:
+        type: string
+      refresh_token:
+        type: string
+      token_type:
+        type: string
+      user_id:
+        type: integer
+    type: object
+  keepmoments_backend_internal_logic.PhotoDetails:
+    properties:
+      content_type:
+        type: string
+      created_at:
+        type: string
+      description_json:
+        example: '{"camera":"iphone","tags":["travel"]}'
+        type: string
+      file_name:
+        type: string
+      id:
+        type: integer
+      object_key:
+        type: string
+      template_id:
+        type: integer
+    type: object
+  keepmoments_backend_internal_logic.TemplateDetails:
+    properties:
+      created_at:
+        type: string
+      description_json:
+        example: '{"layout":"story","ratio":"9:16"}'
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+    type: object
+info:
+  contact: {}
+  description: API for authentication, templates, and photos storage.
+  title: KeepMoments Backend API
+  version: "1.0"
+paths:
+  /api/v1/auth/login:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_presentation_http.AuthRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/keepmoments_backend_internal_logic.AuthResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+      summary: Login user
+      tags:
+      - auth
+  /api/v1/auth/refresh:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Refresh token
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_presentation_http.RefreshRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/keepmoments_backend_internal_logic.AuthResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+      summary: Refresh tokens
+      tags:
+      - auth
+  /api/v1/auth/register:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_presentation_http.AuthRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/keepmoments_backend_internal_logic.AuthResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+      summary: Register user
+      tags:
+      - auth
+  /api/v1/photos:
+    post:
+      consumes:
+      - multipart/form-data
+      parameters:
+      - description: Template ID
+        in: formData
+        name: template_id
+        required: true
+        type: integer
+      - description: Photo description JSON
+        in: formData
+        name: description_json
+        type: string
+      - description: Photo file
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/keepmoments_backend_internal_logic.PhotoDetails'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Upload photo
+      tags:
+      - photos
+  /api/v1/photos/{id}:
+    delete:
+      parameters:
+      - description: Photo ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete photo
+      tags:
+      - photos
+    get:
+      parameters:
+      - description: Photo ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/keepmoments_backend_internal_logic.PhotoDetails'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get photo metadata
+      tags:
+      - photos
+  /api/v1/templates:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/keepmoments_backend_internal_logic.TemplateDetails'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List templates
+      tags:
+      - templates
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Template payload
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_presentation_http.CreateTemplateRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/keepmoments_backend_internal_logic.TemplateDetails'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create template
+      tags:
+      - templates
+  /api/v1/templates/{id}:
+    delete:
+      parameters:
+      - description: Template ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete template
+      tags:
+      - templates
+    get:
+      parameters:
+      - description: Template ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/keepmoments_backend_internal_logic.TemplateDetails'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get template
+      tags:
+      - templates
+  /health:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_presentation_http.HealthResponse'
+      summary: Health check
+      tags:
+      - system
+schemes:
+- http
+securityDefinitions:
+  BearerAuth:
+    description: Enter the access token with the `Bearer ` prefix, for example `Bearer
+      eyJhbGciOi...`
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
