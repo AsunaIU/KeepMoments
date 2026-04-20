@@ -231,9 +231,10 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Security BearerAuth
 // @Param request body logic.ProcessTemplate true "Template payload"
-// @Success 201 {object} logic.TemplateDetails
+// @Success 201 {object} logic.ProcessTemplate
 // @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
+// @Failure 422 {object} logic.HTTPValidationError
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v1/templates [post]
 func (h *Handler) CreateTemplate(w http.ResponseWriter, r *http.Request) {
@@ -266,7 +267,7 @@ func (h *Handler) CreateTemplate(w http.ResponseWriter, r *http.Request) {
 // @Tags templates
 // @Produce json
 // @Security BearerAuth
-// @Success 200 {array} logic.TemplateDetails
+// @Success 200 {array} logic.ProcessTemplate
 // @Failure 401 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v1/templates [get]
@@ -287,7 +288,7 @@ func (h *Handler) ListTemplates(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Security BearerAuth
 // @Param id path string true "Template ID"
-// @Success 200 {object} logic.TemplateDetails
+// @Success 200 {object} logic.ProcessTemplate
 // @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse

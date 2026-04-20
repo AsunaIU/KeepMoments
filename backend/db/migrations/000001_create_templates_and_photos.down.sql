@@ -1,2 +1,4 @@
 DROP TABLE IF EXISTS photos;
+DROP TABLE IF EXISTS template_slots;
+DROP TABLE IF EXISTS template_pages;
 DROP TABLE IF EXISTS templates;

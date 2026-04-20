@@ -367,7 +367,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/keepmoments_backend_internal_logic.TemplateDetails"
+                                "$ref": "#/definitions/keepmoments_backend_internal_logic.ProcessTemplate"
                             }
                         }
                     },
@@ -416,7 +416,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/keepmoments_backend_internal_logic.TemplateDetails"
+                            "$ref": "#/definitions/keepmoments_backend_internal_logic.ProcessTemplate"
                         }
                     },
                     "400": {
@@ -429,6 +429,12 @@ const docTemplate = `{
                         "description": "Unauthorized",
                         "schema": {
                             "$ref": "#/definitions/internal_presentation_http.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/keepmoments_backend_internal_logic.HTTPValidationError"
                         }
                     },
                     "500": {
@@ -467,7 +473,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/keepmoments_backend_internal_logic.TemplateDetails"
+                            "$ref": "#/definitions/keepmoments_backend_internal_logic.ProcessTemplate"
                         }
                     },
                     "400": {
@@ -832,23 +838,6 @@ const docTemplate = `{
         "keepmoments_backend_internal_logic.ProcessTemplate": {
             "type": "object",
             "properties": {
-                "id": {
-                    "type": "string"
-                },
-                "pages": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/keepmoments_backend_internal_logic.ProcessPage"
-                    }
-                }
-            }
-        },
-        "keepmoments_backend_internal_logic.TemplateDetails": {
-            "type": "object",
-            "properties": {
-                "created_at": {
-                    "type": "string"
-                },
                 "id": {
                     "type": "string"
                 },

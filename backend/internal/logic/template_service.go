@@ -2,8 +2,6 @@ package logic
 
 import (
 	"context"
-	"encoding/json"
-	"time"
 
 	"keepmoments/backend/internal/model"
 )
@@ -27,45 +25,34 @@ type CreateTemplateInput struct {
 	Template ProcessTemplate
 }
 
-type TemplateDetails struct {
-	ID        string        `json:"id"`
-	Pages     []ProcessPage `json:"pages"`
-	CreatedAt time.Time     `json:"created_at"`
-}
-
-func (s *TemplateService) Create(ctx context.Context, input CreateTemplateInput) (TemplateDetails, error) {
-	payload, err := json.Marshal(input.Template)
-	if err != nil {
-		return TemplateDetails{}, err
-	}
-
+func (s *TemplateService) Create(ctx context.Context, input CreateTemplateInput) (ProcessTemplate, error) {
 	template, err := s.repo.Create(ctx, model.CreateTemplateParams{
-		ID:           input.Template.ID,
-		TemplateJSON: payload,
+		ID:    input.Template.ID,
+		Pages: mapPagesToModel(input.Template.Pages),
 	})
 	if err != nil {
-		return TemplateDetails{}, err
+		return ProcessTemplate{}, err
 	}
 
 	return mapTemplate(template), nil
 }
 
-func (s *TemplateService) Get(ctx context.Context, id string) (TemplateDetails, error) {
+func (s *TemplateService) Get(ctx context.Context, id string) (ProcessTemplate, error) {
 	template, err := s.repo.GetByID(ctx, id)
 	if err != nil {
-		return TemplateDetails{}, err
+		return ProcessTemplate{}, err
 	}
 
 	return mapTemplate(template), nil
 }
 
-func (s *TemplateService) List(ctx context.Context) ([]TemplateDetails, error) {
+func (s *TemplateService) List(ctx context.Context) ([]ProcessTemplate, error) {
 	templates, err := s.repo.List(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	items := make([]TemplateDetails, 0, len(templates))
+	items := make([]ProcessTemplate, 0, len(templates))
 	for _, template := range templates {
 		items = append(items, mapTemplate(template))
 	}
@@ -77,13 +64,45 @@ func (s *TemplateService) Delete(ctx context.Context, id string) error {
 	return s.repo.Delete(ctx, id)
 }
 
-func mapTemplate(template model.Template) TemplateDetails {
-	var processTemplate ProcessTemplate
-	_ = json.Unmarshal(template.TemplateJSON, &processTemplate)
-
-	return TemplateDetails{
-		ID:        processTemplate.ID,
-		Pages:     processTemplate.Pages,
-		CreatedAt: template.CreatedAt,
+func mapTemplate(template model.Template) ProcessTemplate {
+	return ProcessTemplate{
+		ID:    template.ID,
+		Pages: mapPagesFromModel(template.Pages),
 	}
+}
+
+func mapPagesToModel(pages []ProcessPage) []model.TemplatePage {
+	items := make([]model.TemplatePage, 0, len(pages))
+	for _, page := range pages {
+		modelPage := model.TemplatePage{
+			ID:    page.ID,
+			Slots: make([]model.TemplateSlot, 0, len(page.Slots)),
+		}
+		for _, slot := range page.Slots {
+			modelPage.Slots = append(modelPage.Slots, model.TemplateSlot{
+				ID:      slot.ID,
+				PhotoID: slot.PhotoID,
+			})
+		}
+		items = append(items, modelPage)
+	}
+	return items
+}
+
+func mapPagesFromModel(pages []model.TemplatePage) []ProcessPage {
+	items := make([]ProcessPage, 0, len(pages))
+	for _, page := range pages {
+		processPage := ProcessPage{
+			ID:    page.ID,
+			Slots: make([]ProcessSlot, 0, len(page.Slots)),
+		}
+		for _, slot := range page.Slots {
+			processPage.Slots = append(processPage.Slots, ProcessSlot{
+				ID:      slot.ID,
+				PhotoID: slot.PhotoID,
+			})
+		}
+		items = append(items, processPage)
+	}
+	return items
 }
