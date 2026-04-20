@@ -50,7 +50,7 @@ func Load() (Config, error) {
 			SSLMode:  getEnv("POSTGRES_SSLMODE", "disable"),
 		},
 		S3: S3Config{
-			Endpoint:  getEnv("S3_ENDPOINT", "http://localhost:9000"),
+			Endpoint:  getEnv("S3_ENDPOINT", "http://localhost:9100"),
 			Region:    getEnv("S3_REGION", "us-east-1"),
 			Bucket:    getEnv("S3_BUCKET", "keepmoments"),
 			AccessKey: getEnv("S3_ACCESS_KEY", "minioadmin"),
