@@ -53,6 +53,38 @@ definitions:
       user_id:
         type: integer
     type: object
+  keepmoments_backend_internal_logic.FilledPage:
+    properties:
+      id:
+        type: string
+      slots:
+        items:
+          $ref: '#/definitions/keepmoments_backend_internal_logic.FilledSlot'
+        type: array
+    type: object
+  keepmoments_backend_internal_logic.FilledSlot:
+    properties:
+      id:
+        type: string
+      photo_id:
+        type: string
+    type: object
+  keepmoments_backend_internal_logic.FilledTemplate:
+    properties:
+      id:
+        type: string
+      pages:
+        items:
+          $ref: '#/definitions/keepmoments_backend_internal_logic.FilledPage'
+        type: array
+    type: object
+  keepmoments_backend_internal_logic.HTTPValidationError:
+    properties:
+      detail:
+        items:
+          $ref: '#/definitions/keepmoments_backend_internal_logic.ValidationError'
+        type: array
+    type: object
   keepmoments_backend_internal_logic.PhotoDetails:
     properties:
       content_type:
@@ -71,6 +103,51 @@ definitions:
       template_id:
         type: integer
     type: object
+  keepmoments_backend_internal_logic.ProcessPage:
+    properties:
+      id:
+        type: string
+      slots:
+        items:
+          $ref: '#/definitions/keepmoments_backend_internal_logic.ProcessSlot'
+        type: array
+    type: object
+  keepmoments_backend_internal_logic.ProcessRequest:
+    properties:
+      max_photos:
+        type: integer
+      min_photos:
+        type: integer
+      photo_ids:
+        items:
+          type: string
+        type: array
+      template:
+        $ref: '#/definitions/keepmoments_backend_internal_logic.ProcessTemplate'
+      user_description:
+        type: string
+    type: object
+  keepmoments_backend_internal_logic.ProcessResponse:
+    properties:
+      filled_template:
+        $ref: '#/definitions/keepmoments_backend_internal_logic.FilledTemplate'
+    type: object
+  keepmoments_backend_internal_logic.ProcessSlot:
+    properties:
+      id:
+        type: string
+      photo_id:
+        type: string
+    type: object
+  keepmoments_backend_internal_logic.ProcessTemplate:
+    properties:
+      id:
+        type: string
+      pages:
+        items:
+          $ref: '#/definitions/keepmoments_backend_internal_logic.ProcessPage'
+        type: array
+    type: object
   keepmoments_backend_internal_logic.TemplateDetails:
     properties:
       created_at:
@@ -81,6 +158,16 @@ definitions:
       id:
         type: integer
       name:
+        type: string
+    type: object
+  keepmoments_backend_internal_logic.ValidationError:
+    properties:
+      loc:
+        items: {}
+        type: array
+      msg:
+        type: string
+      type:
         type: string
     type: object
 info:
@@ -447,6 +534,35 @@ paths:
       summary: Health check
       tags:
       - system
+  /process:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Process request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/keepmoments_backend_internal_logic.ProcessRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/keepmoments_backend_internal_logic.ProcessResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/keepmoments_backend_internal_logic.HTTPValidationError'
+      summary: Process
+      tags:
+      - ml
 schemes:
 - http
 securityDefinitions:

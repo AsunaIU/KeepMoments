@@ -19,6 +19,7 @@ const maxPhotoSize = 10 << 20
 type Handler struct {
 	templateService *logic.TemplateService
 	photoService    *logic.PhotoService
+	processService  *logic.ProcessService
 	authService     *logic.AuthService
 	tokenService    *logic.TokenService
 	logger          *slog.Logger
@@ -27,6 +28,7 @@ type Handler struct {
 func NewHandler(
 	templateService *logic.TemplateService,
 	photoService *logic.PhotoService,
+	processService *logic.ProcessService,
 	authService *logic.AuthService,
 	tokenService *logic.TokenService,
 	logger *slog.Logger,
@@ -34,6 +36,7 @@ func NewHandler(
 	return &Handler{
 		templateService: templateService,
 		photoService:    photoService,
+		processService:  processService,
 		authService:     authService,
 		tokenService:    tokenService,
 		logger:          logger,
@@ -48,6 +51,32 @@ func NewHandler(
 // @Router /health [get]
 func (h *Handler) Health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// Process godoc
+// @Summary Process
+// @Tags ml
+// @Accept json
+// @Produce json
+// @Param request body logic.ProcessRequest true "Process request"
+// @Success 200 {object} logic.ProcessResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 422 {object} logic.HTTPValidationError
+// @Router /process [post]
+func (h *Handler) Process(w http.ResponseWriter, r *http.Request) {
+	var req logic.ProcessRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid json body")
+		return
+	}
+
+	result, validation := h.processService.Process(r.Context(), req)
+	if validation != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, validation)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
 }
 
 type authRequest struct {

@@ -57,9 +57,10 @@ func New(ctx context.Context) (*App, error) {
 	refreshTokenRepo := repository.NewRefreshTokenRepository(pg.Pool)
 	templateService := logic.NewTemplateService(templateRepo)
 	photoService := logic.NewPhotoService(photoRepo, s3Client.Storage)
+	processService := logic.NewProcessService()
 	tokenService := logic.NewTokenService(cfg.Auth, refreshTokenRepo)
 	authService := logic.NewAuthService(userRepo, tokenService)
-	handler := httptransport.NewHandler(templateService, photoService, authService, tokenService, logger)
+	handler := httptransport.NewHandler(templateService, photoService, processService, authService, tokenService, logger)
 
 	server := &http.Server{
 		Addr:              fmt.Sprintf(":%s", cfg.HTTPPort),

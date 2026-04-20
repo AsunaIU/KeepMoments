@@ -576,6 +576,51 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/process": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ml"
+                ],
+                "summary": "Process",
+                "parameters": [
+                    {
+                        "description": "Process request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/keepmoments_backend_internal_logic.ProcessRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/keepmoments_backend_internal_logic.ProcessResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/internal_presentation_http.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/keepmoments_backend_internal_logic.HTTPValidationError"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -658,6 +703,56 @@ const docTemplate = `{
                 }
             }
         },
+        "keepmoments_backend_internal_logic.FilledPage": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "slots": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/keepmoments_backend_internal_logic.FilledSlot"
+                    }
+                }
+            }
+        },
+        "keepmoments_backend_internal_logic.FilledSlot": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "photo_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "keepmoments_backend_internal_logic.FilledTemplate": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "pages": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/keepmoments_backend_internal_logic.FilledPage"
+                    }
+                }
+            }
+        },
+        "keepmoments_backend_internal_logic.HTTPValidationError": {
+            "type": "object",
+            "properties": {
+                "detail": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/keepmoments_backend_internal_logic.ValidationError"
+                    }
+                }
+            }
+        },
         "keepmoments_backend_internal_logic.PhotoDetails": {
             "type": "object",
             "properties": {
@@ -685,6 +780,76 @@ const docTemplate = `{
                 }
             }
         },
+        "keepmoments_backend_internal_logic.ProcessPage": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "slots": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/keepmoments_backend_internal_logic.ProcessSlot"
+                    }
+                }
+            }
+        },
+        "keepmoments_backend_internal_logic.ProcessRequest": {
+            "type": "object",
+            "properties": {
+                "max_photos": {
+                    "type": "integer"
+                },
+                "min_photos": {
+                    "type": "integer"
+                },
+                "photo_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "template": {
+                    "$ref": "#/definitions/keepmoments_backend_internal_logic.ProcessTemplate"
+                },
+                "user_description": {
+                    "type": "string"
+                }
+            }
+        },
+        "keepmoments_backend_internal_logic.ProcessResponse": {
+            "type": "object",
+            "properties": {
+                "filled_template": {
+                    "$ref": "#/definitions/keepmoments_backend_internal_logic.FilledTemplate"
+                }
+            }
+        },
+        "keepmoments_backend_internal_logic.ProcessSlot": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "photo_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "keepmoments_backend_internal_logic.ProcessTemplate": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "pages": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/keepmoments_backend_internal_logic.ProcessPage"
+                    }
+                }
+            }
+        },
         "keepmoments_backend_internal_logic.TemplateDetails": {
             "type": "object",
             "properties": {
@@ -699,6 +864,21 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "keepmoments_backend_internal_logic.ValidationError": {
+            "type": "object",
+            "properties": {
+                "loc": {
+                    "type": "array",
+                    "items": {}
+                },
+                "msg": {
+                    "type": "string"
+                },
+                "type": {
                     "type": "string"
                 }
             }

@@ -10,6 +10,7 @@ func NewRouter(handler *Handler) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /health", handler.Health)
+	mux.HandleFunc("POST /process", handler.Process)
 	mux.HandleFunc("GET /swagger", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/swagger/index.html", http.StatusPermanentRedirect)
 	})
