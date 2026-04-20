@@ -613,6 +613,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/internal_presentation_http.ErrorResponse"
                         }
                     },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/internal_presentation_http.ErrorResponse"
+                        }
+                    },
                     "422": {
                         "description": "Unprocessable Entity",
                         "schema": {
@@ -796,8 +802,8 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
-                "template": {
-                    "$ref": "#/definitions/keepmoments_backend_internal_logic.ProcessTemplate"
+                "template_id": {
+                    "type": "string"
                 },
                 "user_description": {
                     "type": "string"

@@ -12,11 +12,19 @@ func NewProcessService() *ProcessService {
 }
 
 type ProcessRequest struct {
-	PhotoIDs        []string        `json:"photo_ids"`
-	UserDescription string          `json:"user_description"`
-	MinPhotos       int             `json:"min_photos"`
-	MaxPhotos       int             `json:"max_photos"`
-	Template        ProcessTemplate `json:"template"`
+	PhotoIDs        []string `json:"photo_ids"`
+	UserDescription string   `json:"user_description"`
+	MinPhotos       int      `json:"min_photos"`
+	MaxPhotos       int      `json:"max_photos"`
+	TemplateID      string   `json:"template_id"`
+}
+
+type ResolvedProcessRequest struct {
+	PhotoIDs        []string
+	UserDescription string
+	MinPhotos       int
+	MaxPhotos       int
+	Template        ProcessTemplate
 }
 
 type ProcessTemplate struct {
@@ -63,8 +71,8 @@ type HTTPValidationError struct {
 	Detail []ValidationError `json:"detail"`
 }
 
-func (s *ProcessService) Process(_ context.Context, req ProcessRequest) (ProcessResponse, *HTTPValidationError) {
-	if validation := validateProcessRequest(req); validation != nil {
+func (s *ProcessService) Process(_ context.Context, req ResolvedProcessRequest) (ProcessResponse, *HTTPValidationError) {
+	if validation := validateResolvedProcessRequest(req); validation != nil {
 		return ProcessResponse{}, validation
 	}
 
@@ -105,7 +113,7 @@ func (s *ProcessService) Process(_ context.Context, req ProcessRequest) (Process
 	}, nil
 }
 
-func validateProcessRequest(req ProcessRequest) *HTTPValidationError {
+func ValidateProcessRequest(req ProcessRequest) *HTTPValidationError {
 	var details []ValidationError
 
 	if len(req.PhotoIDs) == 0 {
@@ -132,28 +140,8 @@ func validateProcessRequest(req ProcessRequest) *HTTPValidationError {
 		details = append(details, validationError([]any{"body", "photo_ids"}, "photo_ids count is less than min_photos", "value_error"))
 	}
 
-	if req.Template.ID == "" {
-		details = append(details, validationError([]any{"body", "template", "id"}, "template.id is required", "value_error"))
-	}
-
-	if len(req.Template.Pages) == 0 {
-		details = append(details, validationError([]any{"body", "template", "pages"}, "template.pages must not be empty", "value_error"))
-	}
-
-	for pageIndex, page := range req.Template.Pages {
-		if page.ID == "" {
-			details = append(details, validationError([]any{"body", "template", "pages", pageIndex, "id"}, "page id is required", "value_error"))
-		}
-
-		if len(page.Slots) == 0 {
-			details = append(details, validationError([]any{"body", "template", "pages", pageIndex, "slots"}, "page slots must not be empty", "value_error"))
-		}
-
-		for slotIndex, slot := range page.Slots {
-			if slot.ID == "" {
-				details = append(details, validationError([]any{"body", "template", "pages", pageIndex, "slots", slotIndex, "id"}, "slot id is required", "value_error"))
-			}
-		}
+	if strings.TrimSpace(req.TemplateID) == "" {
+		details = append(details, validationError([]any{"body", "template_id"}, "template_id is required", "value_error"))
 	}
 
 	if len(details) == 0 {
@@ -161,6 +149,88 @@ func validateProcessRequest(req ProcessRequest) *HTTPValidationError {
 	}
 
 	return &HTTPValidationError{Detail: details}
+}
+
+func ValidateTemplate(template ProcessTemplate) *HTTPValidationError {
+	details := validateTemplate(template, []any{"body"})
+	if len(details) == 0 {
+		return nil
+	}
+
+	return &HTTPValidationError{Detail: details}
+}
+
+func validateResolvedProcessRequest(req ResolvedProcessRequest) *HTTPValidationError {
+	var details []ValidationError
+
+	if len(req.PhotoIDs) == 0 {
+		details = append(details, validationError([]any{"body", "photo_ids"}, "photo_ids must not be empty", "value_error"))
+	}
+
+	if strings.TrimSpace(req.UserDescription) == "" {
+		details = append(details, validationError([]any{"body", "user_description"}, "user_description is required", "value_error"))
+	}
+
+	if req.MinPhotos < 1 {
+		details = append(details, validationError([]any{"body", "min_photos"}, "min_photos must be greater than or equal to 1", "value_error"))
+	}
+
+	if req.MaxPhotos < 1 {
+		details = append(details, validationError([]any{"body", "max_photos"}, "max_photos must be greater than or equal to 1", "value_error"))
+	}
+
+	if req.MinPhotos > 0 && req.MaxPhotos > 0 && req.MaxPhotos < req.MinPhotos {
+		details = append(details, validationError([]any{"body", "max_photos"}, "max_photos must be greater than or equal to min_photos", "value_error"))
+	}
+
+	if req.MinPhotos > 0 && len(req.PhotoIDs) < req.MinPhotos {
+		details = append(details, validationError([]any{"body", "photo_ids"}, "photo_ids count is less than min_photos", "value_error"))
+	}
+
+	details = append(details, validateTemplate(req.Template, []any{"body", "template"})...)
+
+	if len(details) == 0 {
+		return nil
+	}
+
+	return &HTTPValidationError{Detail: details}
+}
+
+func validateTemplate(template ProcessTemplate, pathPrefix []any) []ValidationError {
+	var details []ValidationError
+
+	if template.ID == "" {
+		details = append(details, validationError(appendPath(pathPrefix, "id"), "template.id is required", "value_error"))
+	}
+
+	if len(template.Pages) == 0 {
+		details = append(details, validationError(appendPath(pathPrefix, "pages"), "template.pages must not be empty", "value_error"))
+	}
+
+	for pageIndex, page := range template.Pages {
+		if page.ID == "" {
+			details = append(details, validationError(appendPath(pathPrefix, "pages", pageIndex, "id"), "page id is required", "value_error"))
+		}
+
+		if len(page.Slots) == 0 {
+			details = append(details, validationError(appendPath(pathPrefix, "pages", pageIndex, "slots"), "page slots must not be empty", "value_error"))
+		}
+
+		for slotIndex, slot := range page.Slots {
+			if slot.ID == "" {
+				details = append(details, validationError(appendPath(pathPrefix, "pages", pageIndex, "slots", slotIndex, "id"), "slot id is required", "value_error"))
+			}
+		}
+	}
+
+	return details
+}
+
+func appendPath(prefix []any, values ...any) []any {
+	path := make([]any, 0, len(prefix)+len(values))
+	path = append(path, prefix...)
+	path = append(path, values...)
+	return path
 }
 
 func validationError(loc []any, msg, errType string) ValidationError {

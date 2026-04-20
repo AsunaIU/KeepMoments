@@ -113,8 +113,8 @@ definitions:
         items:
           type: string
         type: array
-      template:
-        $ref: '#/definitions/keepmoments_backend_internal_logic.ProcessTemplate'
+      template_id:
+        type: string
       user_description:
         type: string
     type: object
@@ -544,6 +544,10 @@ paths:
             $ref: '#/definitions/keepmoments_backend_internal_logic.ProcessResponse'
         "400":
           description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+        "404":
+          description: Not Found
           schema:
             $ref: '#/definitions/internal_presentation_http.ErrorResponse'
         "422":

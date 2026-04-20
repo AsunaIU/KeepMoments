@@ -61,6 +61,7 @@ func (h *Handler) Health(w http.ResponseWriter, _ *http.Request) {
 // @Param request body logic.ProcessRequest true "Process request"
 // @Success 200 {object} logic.ProcessResponse
 // @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
 // @Failure 422 {object} logic.HTTPValidationError
 // @Router /process [post]
 func (h *Handler) Process(w http.ResponseWriter, r *http.Request) {
@@ -70,7 +71,33 @@ func (h *Handler) Process(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, validation := h.processService.Process(r.Context(), req)
+	if validation := logic.ValidateProcessRequest(req); validation != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, validation)
+		return
+	}
+
+	template, err := h.templateService.Get(r.Context(), req.TemplateID)
+	if err != nil {
+		if errors.Is(err, repository.ErrTemplateNotFound) {
+			writeError(w, http.StatusNotFound, "template not found")
+			return
+		}
+
+		h.logger.Error("get template for process failed", "error", err, "template_id", req.TemplateID)
+		writeError(w, http.StatusInternalServerError, "failed to load template")
+		return
+	}
+
+	result, validation := h.processService.Process(r.Context(), logic.ResolvedProcessRequest{
+		PhotoIDs:        req.PhotoIDs,
+		UserDescription: req.UserDescription,
+		MinPhotos:       req.MinPhotos,
+		MaxPhotos:       req.MaxPhotos,
+		Template: logic.ProcessTemplate{
+			ID:    template.ID,
+			Pages: template.Pages,
+		},
+	})
 	if validation != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, validation)
 		return
@@ -216,13 +243,7 @@ func (h *Handler) CreateTemplate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, validation := h.processService.Process(r.Context(), logic.ProcessRequest{
-		PhotoIDs:        make([]string, max(1, countTemplateSlots(req))),
-		UserDescription: "template validation",
-		MinPhotos:       1,
-		MaxPhotos:       max(1, countTemplateSlots(req)),
-		Template:        req,
-	})
+	validation := logic.ValidateTemplate(req)
 	if validation != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, validation)
 		return
@@ -411,14 +432,6 @@ func (h *Handler) CreatePhoto(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, photo)
-}
-
-func countTemplateSlots(template logic.ProcessTemplate) int {
-	total := 0
-	for _, page := range template.Pages {
-		total += len(page.Slots)
-	}
-	return total
 }
 
 // GetPhoto godoc
