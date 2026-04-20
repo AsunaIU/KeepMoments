@@ -36,7 +36,7 @@ func NewPhotoService(repo PhotoRepository, storage ObjectStorage) *PhotoService 
 }
 
 type CreatePhotoInput struct {
-	TemplateID      int64
+	TemplateID      string
 	FileName        string
 	ContentType     string
 	FileBytes       []byte
@@ -45,7 +45,7 @@ type CreatePhotoInput struct {
 
 type PhotoDetails struct {
 	ID              int64           `json:"id"`
-	TemplateID      int64           `json:"template_id"`
+	TemplateID      string          `json:"template_id"`
 	FileName        string          `json:"file_name"`
 	ContentType     string          `json:"content_type"`
 	ObjectKey       string          `json:"object_key"`

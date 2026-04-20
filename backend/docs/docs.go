@@ -187,7 +187,7 @@ const docTemplate = `{
                 "summary": "Upload photo",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "Template ID",
                         "name": "template_id",
                         "in": "formData",
@@ -408,7 +408,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_presentation_http.CreateTemplateRequest"
+                            "$ref": "#/definitions/keepmoments_backend_internal_logic.ProcessTemplate"
                         }
                     }
                 ],
@@ -456,7 +456,7 @@ const docTemplate = `{
                 "summary": "Get template",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "Template ID",
                         "name": "id",
                         "in": "path",
@@ -511,7 +511,7 @@ const docTemplate = `{
                 "summary": "Delete template",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "Template ID",
                         "name": "id",
                         "in": "path",
@@ -634,19 +634,6 @@ const docTemplate = `{
                 "password": {
                     "type": "string",
                     "example": "secret123"
-                }
-            }
-        },
-        "internal_presentation_http.CreateTemplateRequest": {
-            "type": "object",
-            "properties": {
-                "description_json": {
-                    "type": "string",
-                    "example": "{\"layout\":\"story\",\"ratio\":\"9:16\"}"
-                },
-                "name": {
-                    "type": "string",
-                    "example": "basic"
                 }
             }
         },
@@ -776,7 +763,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "template_id": {
-                    "type": "integer"
+                    "type": "string"
                 }
             }
         },
@@ -856,15 +843,14 @@ const docTemplate = `{
                 "created_at": {
                     "type": "string"
                 },
-                "description_json": {
-                    "type": "string",
-                    "example": "{\"layout\":\"story\",\"ratio\":\"9:16\"}"
-                },
                 "id": {
-                    "type": "integer"
-                },
-                "name": {
                     "type": "string"
+                },
+                "pages": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/keepmoments_backend_internal_logic.ProcessPage"
+                    }
                 }
             }
         },

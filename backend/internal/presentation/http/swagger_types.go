@@ -16,8 +16,3 @@ type AuthRequest struct {
 type RefreshRequest struct {
 	RefreshToken string `json:"refresh_token" example:"g1A2b3C4d5E6f7G8"`
 }
-
-type CreateTemplateRequest struct {
-	Name            string `json:"name" example:"basic"`
-	DescriptionJSON string `json:"description_json" example:"{\"layout\":\"story\",\"ratio\":\"9:16\"}"`
-}

@@ -4,7 +4,7 @@ import "time"
 
 type Photo struct {
 	ID              int64
-	TemplateID      int64
+	TemplateID      string
 	FileName        string
 	ContentType     string
 	ObjectKey       string
@@ -13,7 +13,7 @@ type Photo struct {
 }
 
 type CreatePhotoParams struct {
-	TemplateID      int64
+	TemplateID      string
 	FileName        string
 	ContentType     string
 	ObjectKey       string

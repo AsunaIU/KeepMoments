@@ -10,9 +10,9 @@ import (
 
 type TemplateRepository interface {
 	Create(ctx context.Context, params model.CreateTemplateParams) (model.Template, error)
-	GetByID(ctx context.Context, id int64) (model.Template, error)
+	GetByID(ctx context.Context, id string) (model.Template, error)
 	List(ctx context.Context) ([]model.Template, error)
-	Delete(ctx context.Context, id int64) error
+	Delete(ctx context.Context, id string) error
 }
 
 type TemplateService struct {
@@ -24,21 +24,24 @@ func NewTemplateService(repo TemplateRepository) *TemplateService {
 }
 
 type CreateTemplateInput struct {
-	Name            string
-	DescriptionJSON json.RawMessage
+	Template ProcessTemplate
 }
 
 type TemplateDetails struct {
-	ID              int64           `json:"id"`
-	Name            string          `json:"name"`
-	DescriptionJSON json.RawMessage `json:"description_json" swaggertype:"string" example:"{\"layout\":\"story\",\"ratio\":\"9:16\"}"`
-	CreatedAt       time.Time       `json:"created_at"`
+	ID        string        `json:"id"`
+	Pages     []ProcessPage `json:"pages"`
+	CreatedAt time.Time     `json:"created_at"`
 }
 
 func (s *TemplateService) Create(ctx context.Context, input CreateTemplateInput) (TemplateDetails, error) {
+	payload, err := json.Marshal(input.Template)
+	if err != nil {
+		return TemplateDetails{}, err
+	}
+
 	template, err := s.repo.Create(ctx, model.CreateTemplateParams{
-		Name:            input.Name,
-		DescriptionJSON: []byte(input.DescriptionJSON),
+		ID:           input.Template.ID,
+		TemplateJSON: payload,
 	})
 	if err != nil {
 		return TemplateDetails{}, err
@@ -47,7 +50,7 @@ func (s *TemplateService) Create(ctx context.Context, input CreateTemplateInput)
 	return mapTemplate(template), nil
 }
 
-func (s *TemplateService) Get(ctx context.Context, id int64) (TemplateDetails, error) {
+func (s *TemplateService) Get(ctx context.Context, id string) (TemplateDetails, error) {
 	template, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return TemplateDetails{}, err
@@ -70,15 +73,17 @@ func (s *TemplateService) List(ctx context.Context) ([]TemplateDetails, error) {
 	return items, nil
 }
 
-func (s *TemplateService) Delete(ctx context.Context, id int64) error {
+func (s *TemplateService) Delete(ctx context.Context, id string) error {
 	return s.repo.Delete(ctx, id)
 }
 
 func mapTemplate(template model.Template) TemplateDetails {
+	var processTemplate ProcessTemplate
+	_ = json.Unmarshal(template.TemplateJSON, &processTemplate)
+
 	return TemplateDetails{
-		ID:              template.ID,
-		Name:            template.Name,
-		DescriptionJSON: json.RawMessage(template.DescriptionJSON),
-		CreatedAt:       template.CreatedAt,
+		ID:        processTemplate.ID,
+		Pages:     processTemplate.Pages,
+		CreatedAt: template.CreatedAt,
 	}
 }

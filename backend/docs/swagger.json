@@ -183,7 +183,7 @@
                 "summary": "Upload photo",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "Template ID",
                         "name": "template_id",
                         "in": "formData",
@@ -404,7 +404,7 @@
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/internal_presentation_http.CreateTemplateRequest"
+                            "$ref": "#/definitions/keepmoments_backend_internal_logic.ProcessTemplate"
                         }
                     }
                 ],
@@ -452,7 +452,7 @@
                 "summary": "Get template",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "Template ID",
                         "name": "id",
                         "in": "path",
@@ -507,7 +507,7 @@
                 "summary": "Delete template",
                 "parameters": [
                     {
-                        "type": "integer",
+                        "type": "string",
                         "description": "Template ID",
                         "name": "id",
                         "in": "path",
@@ -630,19 +630,6 @@
                 "password": {
                     "type": "string",
                     "example": "secret123"
-                }
-            }
-        },
-        "internal_presentation_http.CreateTemplateRequest": {
-            "type": "object",
-            "properties": {
-                "description_json": {
-                    "type": "string",
-                    "example": "{\"layout\":\"story\",\"ratio\":\"9:16\"}"
-                },
-                "name": {
-                    "type": "string",
-                    "example": "basic"
                 }
             }
         },
@@ -772,7 +759,7 @@
                     "type": "string"
                 },
                 "template_id": {
-                    "type": "integer"
+                    "type": "string"
                 }
             }
         },
@@ -852,15 +839,14 @@
                 "created_at": {
                     "type": "string"
                 },
-                "description_json": {
-                    "type": "string",
-                    "example": "{\"layout\":\"story\",\"ratio\":\"9:16\"}"
-                },
                 "id": {
-                    "type": "integer"
-                },
-                "name": {
                     "type": "string"
+                },
+                "pages": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/keepmoments_backend_internal_logic.ProcessPage"
+                    }
                 }
             }
         },

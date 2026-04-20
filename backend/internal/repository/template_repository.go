@@ -25,14 +25,14 @@ func NewTemplateRepository(pool *pgxpool.Pool) *TemplateRepository {
 
 func (r *TemplateRepository) Create(ctx context.Context, params model.CreateTemplateParams) (model.Template, error) {
 	const query = `
-		INSERT INTO templates (name, description_json)
+		INSERT INTO templates (id, template_json)
 		VALUES ($1, $2)
-		RETURNING id, name, description_json, created_at
+		RETURNING id, template_json, created_at
 	`
 
 	var template model.Template
-	err := r.pool.QueryRow(ctx, query, params.Name, params.DescriptionJSON).
-		Scan(&template.ID, &template.Name, &template.DescriptionJSON, &template.CreatedAt)
+	err := r.pool.QueryRow(ctx, query, params.ID, params.TemplateJSON).
+		Scan(&template.ID, &template.TemplateJSON, &template.CreatedAt)
 	if err != nil {
 		return model.Template{}, fmt.Errorf("create template: %w", err)
 	}
@@ -40,16 +40,16 @@ func (r *TemplateRepository) Create(ctx context.Context, params model.CreateTemp
 	return template, nil
 }
 
-func (r *TemplateRepository) GetByID(ctx context.Context, id int64) (model.Template, error) {
+func (r *TemplateRepository) GetByID(ctx context.Context, id string) (model.Template, error) {
 	const query = `
-		SELECT id, name, description_json, created_at
+		SELECT id, template_json, created_at
 		FROM templates
 		WHERE id = $1
 	`
 
 	var template model.Template
 	err := r.pool.QueryRow(ctx, query, id).
-		Scan(&template.ID, &template.Name, &template.DescriptionJSON, &template.CreatedAt)
+		Scan(&template.ID, &template.TemplateJSON, &template.CreatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return model.Template{}, ErrTemplateNotFound
@@ -63,7 +63,7 @@ func (r *TemplateRepository) GetByID(ctx context.Context, id int64) (model.Templ
 
 func (r *TemplateRepository) List(ctx context.Context) ([]model.Template, error) {
 	const query = `
-		SELECT id, name, description_json, created_at
+		SELECT id, template_json, created_at
 		FROM templates
 		ORDER BY id DESC
 	`
@@ -77,7 +77,7 @@ func (r *TemplateRepository) List(ctx context.Context) ([]model.Template, error)
 	var templates []model.Template
 	for rows.Next() {
 		var template model.Template
-		if err := rows.Scan(&template.ID, &template.Name, &template.DescriptionJSON, &template.CreatedAt); err != nil {
+		if err := rows.Scan(&template.ID, &template.TemplateJSON, &template.CreatedAt); err != nil {
 			return nil, fmt.Errorf("scan template: %w", err)
 		}
 		templates = append(templates, template)
@@ -90,7 +90,7 @@ func (r *TemplateRepository) List(ctx context.Context) ([]model.Template, error)
 	return templates, nil
 }
 
-func (r *TemplateRepository) Delete(ctx context.Context, id int64) error {
+func (r *TemplateRepository) Delete(ctx context.Context, id string) error {
 	tag, err := r.pool.Exec(ctx, `DELETE FROM templates WHERE id = $1`, id)
 	if err != nil {
 		var pgErr *pgconn.PgError

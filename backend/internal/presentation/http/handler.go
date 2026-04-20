@@ -197,44 +197,39 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
-type createTemplateRequest struct {
-	Name            string          `json:"name"`
-	DescriptionJSON json.RawMessage `json:"description_json"`
-}
-
 // CreateTemplate godoc
 // @Summary Create template
 // @Tags templates
 // @Accept json
 // @Produce json
 // @Security BearerAuth
-// @Param request body CreateTemplateRequest true "Template payload"
+// @Param request body logic.ProcessTemplate true "Template payload"
 // @Success 201 {object} logic.TemplateDetails
 // @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v1/templates [post]
 func (h *Handler) CreateTemplate(w http.ResponseWriter, r *http.Request) {
-	var req createTemplateRequest
+	var req logic.ProcessTemplate
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
 
-	if strings.TrimSpace(req.Name) == "" {
-		writeError(w, http.StatusBadRequest, "name is required")
-		return
-	}
-
-	descriptionJSON, err := normalizeJSON(req.DescriptionJSON)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "description_json must be valid json")
+	_, validation := h.processService.Process(r.Context(), logic.ProcessRequest{
+		PhotoIDs:        make([]string, max(1, countTemplateSlots(req))),
+		UserDescription: "template validation",
+		MinPhotos:       1,
+		MaxPhotos:       max(1, countTemplateSlots(req)),
+		Template:        req,
+	})
+	if validation != nil {
+		writeJSON(w, http.StatusUnprocessableEntity, validation)
 		return
 	}
 
 	template, err := h.templateService.Create(r.Context(), logic.CreateTemplateInput{
-		Name:            req.Name,
-		DescriptionJSON: descriptionJSON,
+		Template: req,
 	})
 	if err != nil {
 		h.logger.Error("create template failed", "error", err)
@@ -270,7 +265,7 @@ func (h *Handler) ListTemplates(w http.ResponseWriter, r *http.Request) {
 // @Tags templates
 // @Produce json
 // @Security BearerAuth
-// @Param id path int true "Template ID"
+// @Param id path string true "Template ID"
 // @Success 200 {object} logic.TemplateDetails
 // @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
@@ -278,8 +273,8 @@ func (h *Handler) ListTemplates(w http.ResponseWriter, r *http.Request) {
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v1/templates/{id} [get]
 func (h *Handler) GetTemplate(w http.ResponseWriter, r *http.Request) {
-	id, err := parseInt64Path(r, "id")
-	if err != nil {
+	id := strings.TrimSpace(r.PathValue("id"))
+	if id == "" {
 		writeError(w, http.StatusBadRequest, "invalid template id")
 		return
 	}
@@ -304,7 +299,7 @@ func (h *Handler) GetTemplate(w http.ResponseWriter, r *http.Request) {
 // @Tags templates
 // @Produce json
 // @Security BearerAuth
-// @Param id path int true "Template ID"
+// @Param id path string true "Template ID"
 // @Success 204 {string} string "No Content"
 // @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
@@ -313,8 +308,8 @@ func (h *Handler) GetTemplate(w http.ResponseWriter, r *http.Request) {
 // @Failure 500 {object} ErrorResponse
 // @Router /api/v1/templates/{id} [delete]
 func (h *Handler) DeleteTemplate(w http.ResponseWriter, r *http.Request) {
-	id, err := parseInt64Path(r, "id")
-	if err != nil {
+	id := strings.TrimSpace(r.PathValue("id"))
+	if id == "" {
 		writeError(w, http.StatusBadRequest, "invalid template id")
 		return
 	}
@@ -343,7 +338,7 @@ func (h *Handler) DeleteTemplate(w http.ResponseWriter, r *http.Request) {
 // @Accept multipart/form-data
 // @Produce json
 // @Security BearerAuth
-// @Param template_id formData int true "Template ID"
+// @Param template_id formData string true "Template ID"
 // @Param description_json formData string false "Photo description JSON"
 // @Param file formData file true "Photo file"
 // @Success 201 {object} logic.PhotoDetails
@@ -357,9 +352,9 @@ func (h *Handler) CreatePhoto(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	templateID, err := strconv.ParseInt(r.FormValue("template_id"), 10, 64)
-	if err != nil || templateID <= 0 {
-		writeError(w, http.StatusBadRequest, "template_id must be a positive integer")
+	templateID := strings.TrimSpace(r.FormValue("template_id"))
+	if templateID == "" {
+		writeError(w, http.StatusBadRequest, "template_id is required")
 		return
 	}
 
@@ -416,6 +411,14 @@ func (h *Handler) CreatePhoto(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, photo)
+}
+
+func countTemplateSlots(template logic.ProcessTemplate) int {
+	total := 0
+	for _, page := range template.Pages {
+		total += len(page.Slots)
+	}
+	return total
 }
 
 // GetPhoto godoc

@@ -9,15 +9,6 @@ definitions:
         example: secret123
         type: string
     type: object
-  internal_presentation_http.CreateTemplateRequest:
-    properties:
-      description_json:
-        example: '{"layout":"story","ratio":"9:16"}'
-        type: string
-      name:
-        example: basic
-        type: string
-    type: object
   internal_presentation_http.ErrorResponse:
     properties:
       error:
@@ -101,7 +92,7 @@ definitions:
       object_key:
         type: string
       template_id:
-        type: integer
+        type: string
     type: object
   keepmoments_backend_internal_logic.ProcessPage:
     properties:
@@ -152,13 +143,12 @@ definitions:
     properties:
       created_at:
         type: string
-      description_json:
-        example: '{"layout":"story","ratio":"9:16"}'
-        type: string
       id:
-        type: integer
-      name:
         type: string
+      pages:
+        items:
+          $ref: '#/definitions/keepmoments_backend_internal_logic.ProcessPage'
+        type: array
     type: object
   keepmoments_backend_internal_logic.ValidationError:
     properties:
@@ -284,7 +274,7 @@ paths:
         in: formData
         name: template_id
         required: true
-        type: integer
+        type: string
       - description: Photo description JSON
         in: formData
         name: description_json
@@ -422,7 +412,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/internal_presentation_http.CreateTemplateRequest'
+          $ref: '#/definitions/keepmoments_backend_internal_logic.ProcessTemplate'
       produces:
       - application/json
       responses:
@@ -454,7 +444,7 @@ paths:
         in: path
         name: id
         required: true
-        type: integer
+        type: string
       produces:
       - application/json
       responses:
@@ -493,7 +483,7 @@ paths:
         in: path
         name: id
         required: true
-        type: integer
+        type: string
       produces:
       - application/json
       responses:
