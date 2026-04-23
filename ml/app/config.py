@@ -16,6 +16,12 @@ class Settings(BaseSettings):
     KMEANS_RANDOM_STATE: int = 42
     LOG_LEVEL: str = "INFO"
 
+    ANTHROPIC_API_KEY: str | None = None  # absent → caption generation skipped
+    ANTHROPIC_MODEL: str = "claude-haiku-4-5-20251001"
+
+    OPENROUTER_API_KEY: str | None = None  # if set, takes priority over Anthropic
+    OPENROUTER_MODEL: str = "google/gemini-flash-1.5"
+
 
 @lru_cache
 def get_settings() -> Settings:

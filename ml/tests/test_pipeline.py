@@ -27,6 +27,8 @@ def _make_settings():
         S3_BUCKET_NAME="b",
         CLIP_MODEL_NAME="ViT-B/32",
         KMEANS_RANDOM_STATE=42,
+        ANTHROPIC_API_KEY=None,
+        OPENROUTER_API_KEY=None,
     )
 
 

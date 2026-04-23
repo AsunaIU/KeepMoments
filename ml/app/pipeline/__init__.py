@@ -13,6 +13,8 @@ from app.pipeline.quality import score_quality
 from app.pipeline.selector import select_photos
 from app.pipeline.reranker import rerank_by_text
 from app.pipeline.template_filler import count_template_slots, fill_template
+from app.pipeline.caption_generator import generate_captions, _OPENROUTER_BASE_URL
+from app.pipeline.cover_filler import fill_covers
 
 logger = logging.getLogger(__name__)
 
@@ -66,4 +68,52 @@ def _run_pipeline_sync(
     ranked = rerank_by_text(selected, embeddings, request.user_description, clip_model)
 
     # 9. Fill template slots in document order
-    return fill_template(request.template, ranked)
+    filled = fill_template(request.template, ranked)
+
+    # 10. Generate per-page captions (skipped if no caption API key is configured)
+    if settings.OPENROUTER_API_KEY:
+        filled = generate_captions(
+            filled_template=filled,
+            photo_bytes=photo_bytes,
+            user_description=request.user_description,
+            api_key=settings.OPENROUTER_API_KEY,
+            model=settings.OPENROUTER_MODEL,
+            base_url=_OPENROUTER_BASE_URL,
+        )
+    elif settings.ANTHROPIC_API_KEY:
+        filled = generate_captions(
+            filled_template=filled,
+            photo_bytes=photo_bytes,
+            user_description=request.user_description,
+            api_key=settings.ANTHROPIC_API_KEY,
+            model=settings.ANTHROPIC_MODEL,
+        )
+
+    # 11. Fill covers (optional, skipped if template has no covers)
+    if request.template.front_cover is not None or request.template.back_cover is not None:
+        if settings.OPENROUTER_API_KEY:
+            caption_api_key = settings.OPENROUTER_API_KEY
+            caption_model = settings.OPENROUTER_MODEL
+            caption_base_url = _OPENROUTER_BASE_URL
+        elif settings.ANTHROPIC_API_KEY:
+            caption_api_key = settings.ANTHROPIC_API_KEY
+            caption_model = settings.ANTHROPIC_MODEL
+            caption_base_url = None
+        else:
+            caption_api_key = None
+            caption_model = None
+            caption_base_url = None
+
+        filled = fill_covers(
+            filled_template=filled,
+            front_config=request.template.front_cover,
+            back_config=request.template.back_cover,
+            ranked_photos=ranked,
+            photo_bytes=photo_bytes,
+            user_description=request.user_description,
+            api_key=caption_api_key,
+            model=caption_model,
+            base_url=caption_base_url,
+        )
+
+    return filled
