@@ -14,7 +14,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -39,8 +43,13 @@ import com.example.myapplication.ui.theme.ScreenBg
 @Composable
 fun HomeScreen(
     photos: List<Painter> = emptyList(),
+    isAuthenticated: Boolean,
+    userEmail: String?,
+    isCreatingDraft: Boolean,
     onCreateBookClick: () -> Unit,
-    onLoginClick: () -> Unit,
+    onProfileClick: () -> Unit,
+    onAuthClick: () -> Unit,
+    onLogoutClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val displayPhotos = photos.ifEmpty {
@@ -62,7 +71,6 @@ fun HomeScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // Блок с наложенными фото
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -86,7 +94,7 @@ fun HomeScreen(
                         else -> 10f
                     }
                     val width = 140.dp
-                    val height = 200.dp // прямоугольная вертикальная форма
+                    val height = 200.dp
 
                     Box(
                         modifier = Modifier
@@ -95,8 +103,8 @@ fun HomeScreen(
                             .offset(x = offsetX, y = offsetY)
                             .graphicsLayer { rotationZ = rotation }
                             .clip(RoundedCornerShape(20.dp))
-                            .background(Color.White) // белая рамка
-                            .padding(4.dp) // отступ рамки
+                            .background(Color.White)
+                            .padding(4.dp)
                             .zIndex(index.toFloat())
                     ) {
                         Image(
@@ -121,28 +129,77 @@ fun HomeScreen(
                 color = Color(0xFF1F1F1F)
             )
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(28.dp))
 
-            Text(
-                text = "Загрузите фото, ответьте на пару вопросов, а наша нейросеть подготовит дизайн",
-                style = MaterialTheme.typography.bodyMedium,
-                fontSize = 16.sp,
-                color = Color(0xFF8A8A8A),
-                textAlign = TextAlign.Center,
-            )
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                shape = RoundedCornerShape(20.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = if (isAuthenticated) {
+                            "Выполнен вход в аккаунт"
+                        } else {
+                            "Начать можно без регистрации"
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF1F1F1F)
+                    )
+                    Text(
+                        text = if (isAuthenticated) {
+                            userEmail ?: "Вы вошли в аккаунт"
+                        } else {
+                            "Гостевые черновики останутся на устройстве, а для оплаты попросим войти позже."
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFF6E6E6E)
+                    )
+                }
+            }
 
-            Spacer(modifier = Modifier.height(160.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
             Button(
                 onClick = onCreateBookClick,
+                enabled = !isCreatingDraft,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp),
                 shape = RoundedCornerShape(18.dp),
 
             ) {
+                if (isCreatingDraft) {
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.width(18.dp).height(18.dp)
+                    )
+                } else {
+                    Text(
+                        text = "Создать фотокнигу",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 16.sp,
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            OutlinedButton(
+                onClick = onProfileClick,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                shape = RoundedCornerShape(18.dp)
+            ) {
                 Text(
-                    text = "Создать фотокнигу",
+                    text = "Мой профиль",
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 16.sp,
                 )
@@ -150,13 +207,17 @@ fun HomeScreen(
         }
 
         TextButton(
-            onClick = onLoginClick,
+            onClick = if (isAuthenticated) onLogoutClick else onAuthClick,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 24.dp)
         ) {
             Text(
-                text = "Войти в аккаунт",
+                text = if (isAuthenticated) {
+                    "Выйти из аккаунта"
+                } else {
+                    "Войти в аккаунт"
+                },
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
@@ -172,11 +233,16 @@ fun PreviewHomeScreen() {
         painterResource(R.drawable.photo2),
         painterResource(R.drawable.photo3)
     )
-    KeepMomentsTheme{
+    KeepMomentsTheme {
         HomeScreen(
             photos = photos,
+            isAuthenticated = false,
+            userEmail = null,
+            isCreatingDraft = false,
             onCreateBookClick = {},
-            onLoginClick = {}
+            onProfileClick = {},
+            onAuthClick = {},
+            onLogoutClick = {}
         )
     }
 }
