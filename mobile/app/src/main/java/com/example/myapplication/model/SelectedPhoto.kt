@@ -5,5 +5,10 @@ data class SelectedPhoto(
     val uriString: String,
     val displayName: String?,
     val mimeType: String?,
-    val sizeBytes: Long?
+    val sizeBytes: Long?,
+    val width: Int?,
+    val height: Int?,
+    val isValid: Boolean,
+    val validationMessage: String?,
+    val position: Int = 0
 )
