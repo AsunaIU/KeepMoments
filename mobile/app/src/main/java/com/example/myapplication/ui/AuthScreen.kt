@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,6 +19,7 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -41,16 +43,27 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.myapplication.ui.theme.KeepMomentsTheme
+import com.example.myapplication.viewmodel.AuthMode
+import com.example.myapplication.viewmodel.AuthUiState
 
 @Composable
-fun LoginScreen(
+fun AuthScreen(
     onBackClick: () -> Unit,
-    onLoginStubClick: () -> Unit,
+    uiState: AuthUiState,
+    onSubmit: (AuthMode, String, String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var passwordVisible by rememberSaveable { mutableStateOf(false) }
+    var mode by rememberSaveable { mutableStateOf(AuthMode.LOGIN) }
+
+    val title = if (mode == AuthMode.LOGIN) "Вход" else "Регистрация"
+    val subtitle = if (mode == AuthMode.LOGIN) {
+        "Войдите, чтобы сохранить прогресс между устройствами и оформить заказ позже"
+    } else {
+        "Создайте аккаунт через email и пароль. Имя можно указать позже."
+    }
 
     Scaffold(
         modifier = modifier,
@@ -84,14 +97,30 @@ fun LoginScreen(
                     modifier = Modifier.padding(20.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        AuthMode.entries.forEach { authMode ->
+                            val isSelected = authMode == mode
+                            TextButton(
+                                onClick = { mode = authMode },
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = if (authMode == AuthMode.LOGIN) "Вход" else "Регистрация",
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else Color(0xFF6E6E6E),
+                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+
                     Text(
-                        text = "Регистрация",
+                        text = title,
                         style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.SemiBold
                     )
 
                     Text(
-                        text = "Создайте аккаунт за 30 секунд и начните создавать фотокниги",
+                        text = subtitle,
                         style = MaterialTheme.typography.bodyMedium,
                         color = Color(0xFF6E6E6E)
                     )
@@ -153,38 +182,61 @@ fun LoginScreen(
                         )
                     }
 
+                    if (uiState.errorMessage != null) {
+                        Text(
+                            text = uiState.errorMessage,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+
                     Text(
-                        text = "Имя можно указать позже в настройках профиля",
+                        text = "Кнопки Google и восстановление пароля временно скрыты до появления backend-поддержки.",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFF7A7A7A)
                     )
 
                     Button(
-                        onClick = onLoginStubClick,
+                        onClick = { onSubmit(mode, email, password) },
+                        enabled = !uiState.isSubmitting,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(48.dp),
                         shape = RoundedCornerShape(18.dp)
                     ) {
-                        Text(
-                            text = "Создать аккаунт",
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        if (uiState.isSubmitting) {
+                            CircularProgressIndicator(
+                                color = Color.White,
+                                strokeWidth = 2.dp,
+                                modifier = Modifier.height(18.dp)
+                            )
+                        } else {
+                            Text(
+                                text = if (mode == AuthMode.LOGIN) "Войти" else "Создать аккаунт",
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(2.dp))
 
                     TextButton(
-                        onClick = onLoginStubClick,
+                        onClick = {
+                            mode = if (mode == AuthMode.LOGIN) AuthMode.REGISTER else AuthMode.LOGIN
+                        },
                         modifier = Modifier.fillMaxWidth(),
                         contentPadding = PaddingValues(0.dp)
                     ) {
                         Text(
-                            text = "Уже есть аккаунт? ",
+                            text = if (mode == AuthMode.LOGIN) {
+                                "Нет аккаунта? "
+                            } else {
+                                "Уже есть аккаунт? "
+                            },
                             color = Color(0xFF6E6E6E)
                         )
                         Text(
-                            text = "Войти",
+                            text = if (mode == AuthMode.LOGIN) "Зарегистрироваться" else "Войти",
                             color = Color(0xFF3D7CF0)
                         )
                     }
@@ -196,11 +248,12 @@ fun LoginScreen(
 
 @Preview(showBackground = true)
 @Composable
-private fun PreviewLoginScreen() {
+private fun PreviewAuthScreen() {
     KeepMomentsTheme {
-        LoginScreen(
+        AuthScreen(
             onBackClick = {},
-            onLoginStubClick = {}
+            uiState = AuthUiState(),
+            onSubmit = { _, _, _ -> }
         )
     }
 }
