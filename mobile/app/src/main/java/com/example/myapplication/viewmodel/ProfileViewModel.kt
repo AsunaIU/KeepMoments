@@ -49,11 +49,13 @@ class ProfileViewModel(
             else -> "Гость"
         }
         val displayName = storedProfile.displayName?.takeIf { it.isNotBlank() } ?: defaultName
+        val homeGreetingName = storedProfile.displayName?.takeIf { it.isNotBlank() } ?: session?.email
         ProfileUiState(
             displayName = displayName,
             editableDisplayName = storedProfile.displayName ?: if (session == null) "" else defaultName,
             avatarUriString = storedProfile.avatarUriString,
             email = session?.email,
+            homeGreetingName = homeGreetingName,
             isAuthenticated = session != null,
             isSaving = isSaving,
             errorMessage = errorMessage,
@@ -118,6 +120,7 @@ data class ProfileUiState(
     val editableDisplayName: String = "",
     val avatarUriString: String? = null,
     val email: String? = null,
+    val homeGreetingName: String? = null,
     val isAuthenticated: Boolean = false,
     val isSaving: Boolean = false,
     val errorMessage: String? = null,

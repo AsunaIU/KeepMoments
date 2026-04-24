@@ -127,7 +127,7 @@ fun PhotoPreviewScreen(
                         )
                         Button(
                             onClick = onContinueClick,
-                            enabled = uiState.canContinue && !uiState.isProcessing && !uiState.isLoading,
+                            enabled = uiState.canContinue && !uiState.isGeneratingBook && !uiState.isLoading,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(48.dp),
@@ -137,7 +137,7 @@ fun PhotoPreviewScreen(
                                 disabledContainerColor = Blue40.copy(alpha = 0.45f)
                             )
                         ) {
-                            if (uiState.isProcessing) {
+                            if (uiState.isGeneratingBook) {
                                 CircularProgressIndicator(
                                     modifier = Modifier.size(18.dp),
                                     strokeWidth = 2.dp,
