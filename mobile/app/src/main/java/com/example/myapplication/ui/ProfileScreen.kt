@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CreditCard
 import androidx.compose.material.icons.filled.History
@@ -63,6 +64,7 @@ fun ProfileScreen(
     profileUiState: ProfileUiState,
     latestDraft: BookDraftSummary?,
     hasMoreDrafts: Boolean,
+    onBackClick: () -> Unit,
     onCreateNewClick: () -> Unit,
     onOpenDraftClick: (String) -> Unit,
     onAllBooksClick: () -> Unit,
@@ -74,6 +76,14 @@ fun ProfileScreen(
         containerColor = ScreenBg,
         topBar = {
             CenterAlignedTopAppBar(
+                navigationIcon = {
+                    androidx.compose.material3.IconButton(onClick = onBackClick) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Назад"
+                        )
+                    }
+                },
                 title = {
                     Text(
                         text = "Мой профиль",
@@ -488,6 +498,7 @@ private fun PreviewProfileScreen() {
                 coverDisplayName = "Отпуск в горах.jpg"
             ),
             hasMoreDrafts = true,
+            onBackClick = {},
             onCreateNewClick = {},
             onOpenDraftClick = {},
             onAllBooksClick = {},

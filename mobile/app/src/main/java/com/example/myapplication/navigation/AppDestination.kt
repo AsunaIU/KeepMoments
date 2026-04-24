@@ -11,4 +11,10 @@ sealed class AppDestination(val route: String) {
 
         fun createRoute(draftId: String): String = "preview/$draftId"
     }
+
+    data object Rendered : AppDestination("rendered/{draftId}") {
+        const val DRAFT_ID_ARG = "draftId"
+
+        fun createRoute(draftId: String): String = "rendered/$draftId"
+    }
 }

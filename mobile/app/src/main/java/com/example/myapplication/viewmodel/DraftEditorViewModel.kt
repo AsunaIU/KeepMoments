@@ -1,10 +1,13 @@
 package com.example.myapplication.viewmodel
 
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.data.auth.AuthRepository
+import com.example.myapplication.data.books.BooksRepository
+import com.example.myapplication.data.books.RenderedBookStore
 import com.example.myapplication.data.draft.DraftRepository
 import com.example.myapplication.data.media.PhotoImportService
 import com.example.myapplication.model.DraftOwnerType
@@ -25,12 +28,22 @@ class DraftEditorViewModel(
     private val draftId: String,
     private val draftRepository: DraftRepository,
     private val authRepository: AuthRepository,
-    private val photoImportService: PhotoImportService
+    private val photoImportService: PhotoImportService,
+    private val booksRepository: BooksRepository,
+    private val renderedBookStore: RenderedBookStore
 ) : ViewModel() {
+
+    companion object {
+        const val PHOTO_LIMIT = 50
+        private const val TAG = "DraftEditor"
+    }
 
     private val _hasLoadedDraft = MutableStateFlow(false)
     private val _isProcessing = MutableStateFlow(false)
+    private val _isGeneratingBook = MutableStateFlow(false)
     private val _errorMessage = MutableStateFlow<String?>(null)
+    private val _requiresAuthToContinue = MutableStateFlow(false)
+    private val _generatedBookDraftId = MutableStateFlow<String?>(null)
 
     private val sessionFlow = authRepository.session.stateIn(
         scope = viewModelScope,
@@ -48,21 +61,63 @@ class DraftEditorViewModel(
         initialValue = null
     )
 
-    val uiState: StateFlow<DraftEditorUiState> = combine(
-        draftFlow,
+    private data class DraftEditorTransientState(
+        val hasLoadedDraft: Boolean,
+        val isProcessing: Boolean,
+        val isGeneratingBook: Boolean,
+        val errorMessage: String?,
+        val requiresAuthToContinue: Boolean,
+        val generatedBookDraftId: String?
+    )
+
+    private val loadingAndWorkStateFlow = combine(
         _hasLoadedDraft,
         _isProcessing,
-        _errorMessage
-    ) { draft, hasLoadedDraft, isProcessing, errorMessage ->
+        _isGeneratingBook
+    ) { hasLoadedDraft, isProcessing, isGeneratingBook ->
+        Triple(hasLoadedDraft, isProcessing, isGeneratingBook)
+    }
+
+    private val messageAndNavigationStateFlow = combine(
+        _errorMessage,
+        _requiresAuthToContinue,
+        _generatedBookDraftId
+    ) { errorMessage, requiresAuthToContinue, generatedBookDraftId ->
+        Triple(errorMessage, requiresAuthToContinue, generatedBookDraftId)
+    }
+
+    private val transientStateFlow = combine(
+        loadingAndWorkStateFlow,
+        messageAndNavigationStateFlow
+    ) { loadingAndWorkState, messageAndNavigationState ->
+        val (hasLoadedDraft, isProcessing, isGeneratingBook) = loadingAndWorkState
+        val (errorMessage, requiresAuthToContinue, generatedBookDraftId) = messageAndNavigationState
+        DraftEditorTransientState(
+            hasLoadedDraft = hasLoadedDraft,
+            isProcessing = isProcessing,
+            isGeneratingBook = isGeneratingBook,
+            errorMessage = errorMessage,
+            requiresAuthToContinue = requiresAuthToContinue,
+            generatedBookDraftId = generatedBookDraftId
+        )
+    }
+
+    val uiState: StateFlow<DraftEditorUiState> = combine(
+        draftFlow,
+        transientStateFlow
+    ) { draft, transientState ->
         DraftEditorUiState(
             draftId = draftId,
             ownerType = draft?.ownerType,
             selectedPhotos = draft?.selectedPhotos.orEmpty(),
-            isLoading = !hasLoadedDraft,
-            isProcessing = isProcessing,
-            errorMessage = errorMessage,
-            isMissing = hasLoadedDraft && draft == null,
-            canContinue = draft?.selectedPhotos?.any(SelectedPhoto::isValid) == true
+            isLoading = !transientState.hasLoadedDraft,
+            isProcessing = transientState.isProcessing,
+            isGeneratingBook = transientState.isGeneratingBook,
+            errorMessage = transientState.errorMessage,
+            isMissing = transientState.hasLoadedDraft && draft == null,
+            canContinue = draft?.selectedPhotos?.any(SelectedPhoto::isValid) == true,
+            requiresAuthToContinue = transientState.requiresAuthToContinue,
+            generatedBookDraftId = transientState.generatedBookDraftId
         )
     }.stateIn(
         scope = viewModelScope,
@@ -110,10 +165,36 @@ class DraftEditorViewModel(
 
     fun onContinueClicked() {
         val currentDraft = draftFlow.value
-        _errorMessage.value = if (currentDraft?.selectedPhotos?.any(SelectedPhoto::isValid) == true) {
-            "Следующий шаг MVP пока в разработке"
-        } else {
-            "Добавьте хотя бы одно валидное фото"
+        Log.d(TAG, "continue clicked draftId=$draftId")
+        if (currentDraft?.selectedPhotos?.any(SelectedPhoto::isValid) != true) {
+            Log.e(TAG, "continue blocked: no valid photos")
+            _errorMessage.value = "Добавьте хотя бы одно валидное фото"
+            return
+        }
+
+        if (sessionFlow.value == null) {
+            // Backend upload and /process ordering require BearerAuth by current contract.
+            Log.d(TAG, "continue blocked: auth required draftId=$draftId")
+            _errorMessage.value = "Для создания книги нужен вход в аккаунт"
+            _requiresAuthToContinue.value = true
+            return
+        }
+
+        viewModelScope.launch {
+            Log.d(TAG, "continue generating book draftId=$draftId")
+            _isGeneratingBook.value = true
+            _errorMessage.value = null
+            val result = booksRepository.generateRenderedBook(currentDraft)
+            _isGeneratingBook.value = false
+
+            result.onSuccess { book ->
+                renderedBookStore.save(draftId = draftId, book = book)
+                Log.d(TAG, "continue success draftId=$draftId navigate rendered")
+                _generatedBookDraftId.value = draftId
+            }.onFailure { throwable ->
+                Log.e(TAG, "continue failed draftId=$draftId: ${throwable.message}", throwable)
+                _errorMessage.value = throwable.localizedMessage ?: "Не удалось собрать книгу"
+            }
         }
     }
 
@@ -121,23 +202,36 @@ class DraftEditorViewModel(
         _errorMessage.update { null }
     }
 
+    fun consumeAuthRequirement() {
+        _requiresAuthToContinue.value = false
+    }
+
+    fun consumeGeneratedBookNavigation() {
+        _generatedBookDraftId.value = null
+    }
+
     class Factory(
         private val draftId: String,
         private val draftRepository: DraftRepository,
         private val authRepository: AuthRepository,
-        private val photoImportService: PhotoImportService
+        private val photoImportService: PhotoImportService,
+        private val booksRepository: BooksRepository,
+        private val renderedBookStore: RenderedBookStore
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             if (modelClass.isAssignableFrom(DraftEditorViewModel::class.java)) {
-                return DraftEditorViewModel(draftId, draftRepository, authRepository, photoImportService) as T
+                return DraftEditorViewModel(
+                    draftId = draftId,
+                    draftRepository = draftRepository,
+                    authRepository = authRepository,
+                    photoImportService = photoImportService,
+                    booksRepository = booksRepository,
+                    renderedBookStore = renderedBookStore
+                ) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
         }
-    }
-
-    companion object {
-        const val PHOTO_LIMIT = 50
     }
 }
 
@@ -147,7 +241,10 @@ data class DraftEditorUiState(
     val selectedPhotos: List<SelectedPhoto> = emptyList(),
     val isLoading: Boolean = false,
     val isProcessing: Boolean = false,
+    val isGeneratingBook: Boolean = false,
     val errorMessage: String? = null,
     val isMissing: Boolean = false,
-    val canContinue: Boolean = false
+    val canContinue: Boolean = false,
+    val requiresAuthToContinue: Boolean = false,
+    val generatedBookDraftId: String? = null
 )

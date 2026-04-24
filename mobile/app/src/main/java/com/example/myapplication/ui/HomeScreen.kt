@@ -14,8 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -45,6 +43,7 @@ fun HomeScreen(
     photos: List<Painter> = emptyList(),
     isAuthenticated: Boolean,
     userEmail: String?,
+    greetingName: String?,
     isCreatingDraft: Boolean,
     onCreateBookClick: () -> Unit,
     onProfileClick: () -> Unit,
@@ -129,41 +128,25 @@ fun HomeScreen(
                 color = Color(0xFF1F1F1F)
             )
 
-            Spacer(modifier = Modifier.height(28.dp))
-
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                shape = RoundedCornerShape(20.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Text(
-                        text = if (isAuthenticated) {
-                            "Выполнен вход в аккаунт"
-                        } else {
-                            "Начать можно без регистрации"
-                        },
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color(0xFF1F1F1F)
-                    )
-                    Text(
-                        text = if (isAuthenticated) {
-                            userEmail ?: "Вы вошли в аккаунт"
-                        } else {
-                            "Гостевые черновики останутся на устройстве, а для оплаты попросим войти позже."
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFF6E6E6E)
-                    )
-                }
+            if (isAuthenticated) {
+                Spacer(modifier = Modifier.height(20.dp))
+                Text(
+                    text = buildString {
+                        append("Добро пожаловать")
+                        val resolvedName = greetingName?.takeIf { it.isNotBlank() } ?: userEmail
+                        if (!resolvedName.isNullOrBlank()) {
+                            append(", ")
+                            append(resolvedName)
+                        }
+                    },
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center,
+                    color = Color(0xFF1F1F1F)
+                )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(if (isAuthenticated) 24.dp else 28.dp))
 
             Button(
                 onClick = onCreateBookClick,
@@ -238,6 +221,7 @@ fun PreviewHomeScreen() {
             photos = photos,
             isAuthenticated = false,
             userEmail = null,
+            greetingName = null,
             isCreatingDraft = false,
             onCreateBookClick = {},
             onProfileClick = {},

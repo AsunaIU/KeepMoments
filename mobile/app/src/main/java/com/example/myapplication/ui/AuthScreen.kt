@@ -58,11 +58,11 @@ fun AuthScreen(
     var passwordVisible by rememberSaveable { mutableStateOf(false) }
     var mode by rememberSaveable { mutableStateOf(AuthMode.LOGIN) }
 
-    val title = if (mode == AuthMode.LOGIN) "Вход" else "Регистрация"
+    val title = if (mode == AuthMode.LOGIN) "С возвращением !" else "Создание аккаунта"
     val subtitle = if (mode == AuthMode.LOGIN) {
-        "Войдите, чтобы сохранить прогресс между устройствами и оформить заказ позже"
+        "Войдите в аккаунт, чтобы продолжить работу с вашими фотоальбомами"
     } else {
-        "Создайте аккаунт через email и пароль. Имя можно указать позже."
+        "Укажите email и пароль, чтобы создать аккаунт"
     }
 
     Scaffold(
@@ -189,12 +189,6 @@ fun AuthScreen(
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
-
-                    Text(
-                        text = "Кнопки Google и восстановление пароля временно скрыты до появления backend-поддержки.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF7A7A7A)
-                    )
 
                     Button(
                         onClick = { onSubmit(mode, email, password) },

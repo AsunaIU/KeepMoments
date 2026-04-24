@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -33,10 +34,12 @@ import com.example.myapplication.ui.HomeScreen
 import com.example.myapplication.ui.PhotoPreviewScreen
 import com.example.myapplication.ui.ProfileScreen
 import com.example.myapplication.ui.ProfileSettingsScreen
+import com.example.myapplication.ui.RenderedBookScreen
 import com.example.myapplication.viewmodel.AuthViewModel
 import com.example.myapplication.viewmodel.DraftEditorViewModel
 import com.example.myapplication.viewmodel.DraftsViewModel
 import com.example.myapplication.viewmodel.ProfileViewModel
+import com.example.myapplication.viewmodel.RenderedBookViewModel
 import kotlinx.coroutines.launch
 
 @SuppressLint("UnusedMaterial3ScaffoldPaddingParameter")
@@ -46,6 +49,7 @@ fun AppNavGraph(
     appContainer: AppContainer,
     navController: NavHostController = rememberNavController()
 ) {
+    val navigationTag = "Navigation"
     val authViewModel: AuthViewModel = viewModel(
         factory = AuthViewModel.Factory(appContainer.authRepository)
     )
@@ -116,11 +120,17 @@ fun AppNavGraph(
                 HomeScreen(
                     isAuthenticated = authUiState.isAuthenticated,
                     userEmail = authUiState.session?.email,
+                    greetingName = profileUiState.homeGreetingName,
                     isCreatingDraft = draftsUiState.isCreating,
                     onCreateBookClick = {
-                        launcher.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                        )
+                        if (authUiState.isAuthenticated) {
+                            launcher.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            )
+                        } else {
+                            Log.d(navigationTag, "create book requires auth from home")
+                            navController.navigate(AppDestination.Auth.route)
+                        }
                     },
                     onProfileClick = { navController.navigate(AppDestination.Profile.route) },
                     onAuthClick = { navController.navigate(AppDestination.Auth.route) },
@@ -174,10 +184,23 @@ fun AppNavGraph(
                     profileUiState = profileUiState,
                     latestDraft = latestDraft,
                     hasMoreDrafts = draftsUiState.drafts.size > 1,
+                    onBackClick = {
+                        navController.navigate(AppDestination.Home.route) {
+                            popUpTo(AppDestination.Home.route) {
+                                inclusive = false
+                            }
+                            launchSingleTop = true
+                        }
+                    },
                     onCreateNewClick = {
-                        launcher.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                        )
+                        if (authUiState.isAuthenticated) {
+                            launcher.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            )
+                        } else {
+                            Log.d(navigationTag, "create book requires auth from profile")
+                            navController.navigate(AppDestination.Auth.route)
+                        }
                     },
                     onOpenDraftClick = { draftId ->
                         navController.navigate(AppDestination.Preview.createRoute(draftId))
@@ -245,7 +268,9 @@ fun AppNavGraph(
                         draftId = draftId,
                         draftRepository = appContainer.draftRepository,
                         authRepository = appContainer.authRepository,
-                        photoImportService = appContainer.photoImportService
+                        photoImportService = appContainer.photoImportService,
+                        booksRepository = appContainer.booksRepository,
+                        renderedBookStore = appContainer.renderedBookStore
                     )
                 )
                 val uiState = draftEditorViewModel.uiState.collectAsStateWithLifecycle().value
@@ -266,6 +291,22 @@ fun AppNavGraph(
                     }
                 }
 
+                LaunchedEffect(uiState.requiresAuthToContinue) {
+                    if (uiState.requiresAuthToContinue) {
+                        Log.d(navigationTag, "preview continue requires auth draftId=$draftId")
+                        draftEditorViewModel.consumeAuthRequirement()
+                        navController.navigate(AppDestination.Auth.route)
+                    }
+                }
+
+                LaunchedEffect(uiState.generatedBookDraftId) {
+                    uiState.generatedBookDraftId?.let { generatedDraftId ->
+                        Log.d(navigationTag, "navigate to rendered draftId=$generatedDraftId")
+                        draftEditorViewModel.consumeGeneratedBookNavigation()
+                        navController.navigate(AppDestination.Rendered.createRoute(generatedDraftId))
+                    }
+                }
+
                 PhotoPreviewScreen(
                     uiState = uiState,
                     onBackClick = { navController.popBackStack() },
@@ -278,6 +319,59 @@ fun AppNavGraph(
                     onContinueClick = draftEditorViewModel::onContinueClicked,
                     onOpenDraftsClick = {
                         navController.navigate(AppDestination.Drafts.route)
+                    }
+                )
+            }
+
+            composable(
+                route = AppDestination.Rendered.route,
+                arguments = listOf(
+                    navArgument(AppDestination.Rendered.DRAFT_ID_ARG) {
+                        type = NavType.StringType
+                    }
+                )
+            ) { backStackEntry ->
+                val draftId = backStackEntry.arguments?.getString(AppDestination.Rendered.DRAFT_ID_ARG)
+                    ?: return@composable
+                val renderedBookViewModel: RenderedBookViewModel = viewModel(
+                    key = "rendered-$draftId",
+                    factory = RenderedBookViewModel.Factory(
+                        draftId = draftId,
+                        renderedBookStore = appContainer.renderedBookStore,
+                        pdfExporter = appContainer.pdfExporter
+                    )
+                )
+                val renderedBookUiState = renderedBookViewModel.uiState.collectAsStateWithLifecycle().value
+                val createDocumentLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.CreateDocument("application/pdf")
+                ) { uri ->
+                    Log.d(navigationTag, "createDocument returned uri=$uri")
+                    if (uri != null) {
+                        renderedBookViewModel.exportToPdf(uri)
+                    }
+                }
+
+                LaunchedEffect(renderedBookUiState.message) {
+                    renderedBookUiState.message?.let {
+                        snackbarHostState.showSnackbar(it)
+                        renderedBookViewModel.clearMessage()
+                    }
+                }
+
+                RenderedBookScreen(
+                    book = renderedBookUiState.book,
+                    isExporting = renderedBookUiState.isExporting,
+                    onBackClick = { navController.popBackStack() },
+                    onProfileClick = {
+                        navController.navigate(AppDestination.Profile.route) {
+                            popUpTo(AppDestination.Home.route) {
+                                inclusive = false
+                            }
+                            launchSingleTop = true
+                        }
+                    },
+                    onDownloadPdfClick = {
+                        createDocumentLauncher.launch("keepmoments-$draftId.pdf")
                     }
                 )
             }
