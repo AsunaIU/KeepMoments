@@ -93,6 +93,12 @@ class DraftsViewModel(
         }
     }
 
+    fun renameDraft(draftId: String, title: String) {
+        viewModelScope.launch {
+            draftRepository.updateDraftTitle(draftId = draftId, title = title)
+        }
+    }
+
     fun clearError() {
         _errorMessage.update { null }
     }

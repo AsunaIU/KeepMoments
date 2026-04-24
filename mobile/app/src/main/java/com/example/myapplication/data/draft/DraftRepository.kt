@@ -40,6 +40,7 @@ class DraftRepository(
                 id = draftId,
                 ownerType = ownerType.name,
                 ownerUserId = ownerUserId,
+                title = null,
                 bookType = "PHOTOBOOK",
                 storyPrompt = null,
                 styleId = null,
@@ -92,11 +93,20 @@ class DraftRepository(
         draftDao.touchDraft(draftId = draftId, timestamp = System.currentTimeMillis())
     }
 
+    suspend fun updateDraftTitle(draftId: String, title: String?) {
+        draftDao.updateDraftTitle(
+            draftId = draftId,
+            title = title?.trim()?.takeIf { it.isNotBlank() },
+            timestamp = System.currentTimeMillis()
+        )
+    }
+
     private fun DraftWithPhotos.toModel(): BookDraft {
         return BookDraft(
             id = draft.id,
             ownerType = DraftOwnerType.valueOf(draft.ownerType),
             ownerUserId = draft.ownerUserId,
+            title = draft.title,
             createdAt = draft.createdAt,
             updatedAt = draft.updatedAt,
             selectedPhotos = photos
@@ -124,6 +134,7 @@ class DraftRepository(
             id = draft.id,
             ownerType = DraftOwnerType.valueOf(draft.ownerType),
             ownerUserId = draft.ownerUserId,
+            title = draft.title,
             updatedAt = draft.updatedAt,
             photoCount = sortedPhotos.size,
             validPhotoCount = sortedPhotos.count { it.isValid },

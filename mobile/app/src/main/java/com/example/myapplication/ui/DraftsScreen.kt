@@ -207,7 +207,8 @@ private fun DraftCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = draft.coverDisplayName
+                        text = draft.title
+                            ?: draft.coverDisplayName
                             ?.substringBeforeLast('.')
                             ?.replace('_', ' ')
                             ?.replace('-', ' ')
@@ -216,7 +217,6 @@ private fun DraftCard(
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
                     )
-                    OwnerBadge(ownerType = draft.ownerType)
                 }
 
                 Text(
@@ -242,22 +242,6 @@ private fun DraftCard(
     }
 }
 
-@Composable
-private fun OwnerBadge(ownerType: DraftOwnerType) {
-    Surface(
-        shape = RoundedCornerShape(999.dp),
-        color = if (ownerType == DraftOwnerType.USER) Color(0xFFE7F0FF) else Color(0xFFF3F1FF)
-    ) {
-        Text(
-            text = if (ownerType == DraftOwnerType.USER) "Аккаунт" else "Гость",
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-            color = if (ownerType == DraftOwnerType.USER) Color(0xFF2456CB) else Color(0xFF6B4CD6),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold
-        )
-    }
-}
-
 @Preview(showBackground = true)
 @Composable
 private fun PreviewDraftsScreen() {
@@ -269,6 +253,7 @@ private fun PreviewDraftsScreen() {
                         id = "1",
                         ownerType = DraftOwnerType.GUEST,
                         ownerUserId = null,
+                        title = "Семейный альбом",
                         updatedAt = System.currentTimeMillis(),
                         photoCount = 12,
                         validPhotoCount = 10,

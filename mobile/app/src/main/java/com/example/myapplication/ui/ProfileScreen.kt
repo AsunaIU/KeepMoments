@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,9 +22,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CreditCard
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -32,11 +36,14 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -69,8 +76,12 @@ fun ProfileScreen(
     onOpenDraftClick: (String) -> Unit,
     onAllBooksClick: () -> Unit,
     onSettingsClick: () -> Unit,
+    onRenameDraft: (String, String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var renamingDraft by remember { mutableStateOf<BookDraftSummary?>(null) }
+    var draftTitleInput by remember { mutableStateOf("") }
+
     Scaffold(
         modifier = modifier,
         containerColor = ScreenBg,
@@ -117,7 +128,11 @@ fun ProfileScreen(
                 if (latestDraft != null) {
                     LatestBookCard(
                         draft = latestDraft,
-                        onEditClick = { onOpenDraftClick(latestDraft.id) }
+                        onEditClick = { onOpenDraftClick(latestDraft.id) },
+                        onRenameClick = {
+                            renamingDraft = latestDraft
+                            draftTitleInput = latestDraft.displayTitle
+                        }
                     )
                 } else {
                     EmptyBooksCard(onCreateNewClick = onCreateNewClick)
@@ -144,6 +159,36 @@ fun ProfileScreen(
                 Spacer(modifier = Modifier.height(12.dp))
             }
         }
+    }
+
+    renamingDraft?.let { draft ->
+        AlertDialog(
+            onDismissRequest = { renamingDraft = null },
+            title = { Text("Название фотокниги") },
+            text = {
+                OutlinedTextField(
+                    value = draftTitleInput,
+                    onValueChange = { draftTitleInput = it },
+                    singleLine = true,
+                    placeholder = { Text("Моя фотокнига") }
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onRenameDraft(draft.id, draftTitleInput)
+                        renamingDraft = null
+                    }
+                ) {
+                    Text("Сохранить")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { renamingDraft = null }) {
+                    Text("Отмена")
+                }
+            }
+        )
     }
 }
 
@@ -185,18 +230,14 @@ private fun ProfileHeaderCard(uiState: ProfileUiState) {
 @Composable
 private fun LatestBookCard(
     draft: BookDraftSummary,
-    onEditClick: () -> Unit
+    onEditClick: () -> Unit,
+    onRenameClick: () -> Unit
 ) {
     val savedAtLabel = remember(draft.updatedAt) {
         DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT, Locale("ru"))
             .format(Date(draft.updatedAt))
     }
-    val title = draft.coverDisplayName
-        ?.substringBeforeLast('.')
-        ?.replace('_', ' ')
-        ?.replace('-', ' ')
-        ?.takeIf { it.isNotBlank() }
-        ?: "Моя фотокнига"
+    val title = draft.displayTitle
 
     Card(
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -223,14 +264,34 @@ private fun LatestBookCard(
                         coverUriString = draft.coverUriString,
                         modifier = Modifier.size(82.dp)
                     )
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                    Column(
+                        modifier = Modifier.padding(start = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = title,
+                                modifier = Modifier.weight(1f, fill = false),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            androidx.compose.material3.IconButton(
+                                onClick = onRenameClick,
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = "Переименовать фотокнигу",
+                                    tint = TextSecondary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
                         Text(
                             text = "Сохранено: $savedAtLabel • ${draft.photoCount} фото • Черновик",
                             color = TextSecondary,
@@ -238,24 +299,15 @@ private fun LatestBookCard(
                         )
                         TextButton(
                             onClick = onEditClick,
-                            modifier = Modifier.padding(start = 0.dp)
+                            contentPadding = PaddingValues(0.dp),
+                            modifier = Modifier.wrapContentWidth()
                         ) {
-                            Text("Редактировать макет")
+                            Text(
+                                "Редактировать макет",
+                                maxLines = 1
+                            )
                         }
                     }
-                }
-
-                Surface(
-                    shape = RoundedCornerShape(999.dp),
-                    color = Color(0xFFFCE7A7)
-                ) {
-                    Text(
-                        text = "ЧЕРНОВИК",
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Color(0xFF8A6110),
-                        fontWeight = FontWeight.SemiBold
-                    )
                 }
             }
 
@@ -277,6 +329,15 @@ private fun LatestBookCard(
         }
     }
 }
+
+private val BookDraftSummary.displayTitle: String
+    get() = title?.takeIf { it.isNotBlank() }
+        ?: coverDisplayName
+            ?.substringBeforeLast('.')
+            ?.replace('_', ' ')
+            ?.replace('-', ' ')
+            ?.takeIf { it.isNotBlank() }
+        ?: "Моя фотокнига"
 
 @Composable
 private fun EmptyBooksCard(
@@ -491,6 +552,7 @@ private fun PreviewProfileScreen() {
                 id = "1",
                 ownerType = DraftOwnerType.USER,
                 ownerUserId = 1L,
+                title = "Отпуск в горах",
                 updatedAt = System.currentTimeMillis(),
                 photoCount = 35,
                 validPhotoCount = 35,
@@ -502,7 +564,8 @@ private fun PreviewProfileScreen() {
             onCreateNewClick = {},
             onOpenDraftClick = {},
             onAllBooksClick = {},
-            onSettingsClick = {}
+            onSettingsClick = {},
+            onRenameDraft = { _, _ -> }
         )
     }
 }

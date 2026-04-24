@@ -43,4 +43,7 @@ interface DraftDao {
 
     @Query("UPDATE drafts SET updatedAt = :timestamp, lastOpenedAt = :timestamp WHERE id = :draftId")
     suspend fun touchDraft(draftId: String, timestamp: Long)
+
+    @Query("UPDATE drafts SET title = :title, updatedAt = :timestamp WHERE id = :draftId")
+    suspend fun updateDraftTitle(draftId: String, title: String?, timestamp: Long)
 }

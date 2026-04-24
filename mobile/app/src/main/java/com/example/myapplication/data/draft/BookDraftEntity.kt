@@ -15,6 +15,7 @@ data class BookDraftEntity(
     @PrimaryKey val id: String,
     val ownerType: String,
     val ownerUserId: Long?,
+    val title: String?,
     val bookType: String,
     val storyPrompt: String?,
     val styleId: String?,

@@ -206,7 +206,8 @@ fun AppNavGraph(
                         navController.navigate(AppDestination.Preview.createRoute(draftId))
                     },
                     onAllBooksClick = { navController.navigate(AppDestination.Drafts.route) },
-                    onSettingsClick = { navController.navigate(AppDestination.ProfileSettings.route) }
+                    onSettingsClick = { navController.navigate(AppDestination.ProfileSettings.route) },
+                    onRenameDraft = draftsViewModel::renameDraft
                 )
             }
 
