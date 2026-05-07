@@ -46,6 +46,7 @@ def _pipeline_patch_stack(overrides: dict | None = None):
         "app.pipeline.rerank_by_text": MagicMock(return_value=list(_PHOTO_BYTES)),
         "app.pipeline.count_template_slots": MagicMock(return_value=2),
         "app.pipeline.fill_template": MagicMock(return_value=_FILLED),
+        "app.pipeline.detect_orientation": MagicMock(return_value={}),
     }
     if overrides:
         defaults.update(overrides)
@@ -147,6 +148,26 @@ def test_download_called_with_correct_bucket():
 # ---------------------------------------------------------------------------
 # run_pipeline async wrapper
 # ---------------------------------------------------------------------------
+
+def test_detect_orientation_called_with_photo_bytes():
+    request = make_process_request(photo_ids=["p1", "p2"], min_photos=1, max_photos=5)
+    stack, mocks = _pipeline_patch_stack()
+    with stack:
+        _run_pipeline_sync(request, _make_settings(), MagicMock(), MagicMock(), MagicMock())
+    mocks["detect_orientation"].assert_called_once_with(_PHOTO_BYTES)
+
+
+def test_fill_template_receives_orientations_kwarg():
+    request = make_process_request(photo_ids=["p1", "p2"], min_photos=1, max_photos=5)
+    fake_orientations = {"p1": "landscape", "p2": "portrait"}
+    stack, mocks = _pipeline_patch_stack(
+        {"app.pipeline.detect_orientation": MagicMock(return_value=fake_orientations)}
+    )
+    with stack:
+        _run_pipeline_sync(request, _make_settings(), MagicMock(), MagicMock(), MagicMock())
+    _, call_kwargs = mocks["fill_template"].call_args
+    assert call_kwargs.get("orientations") == fake_orientations
+
 
 async def test_run_pipeline_async_wrapper(mock_settings):
     request = make_process_request()

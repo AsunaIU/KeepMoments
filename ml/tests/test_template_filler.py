@@ -1,6 +1,6 @@
 from app.pipeline.template_filler import count_template_slots, fill_template
-from app.schemas import Page, Slot, Template
-from tests.conftest import make_template
+from app.schemas import Orientation, Page, Slot, Template
+from tests.conftest import make_template, make_template_with_orientations
 
 
 def test_count_slots_zero_pages():
@@ -76,3 +76,103 @@ def test_fill_multi_page_sequential_order():
     assert result.pages[0].slots[1].photo_id == "B"
     assert result.pages[1].slots[0].photo_id == "C"
     assert result.pages[1].slots[1].photo_id == "D"
+
+
+# ---------------------------------------------------------------------------
+# Orientation-aware filling tests
+# ---------------------------------------------------------------------------
+
+_PORT = Orientation.portrait
+_LAND = Orientation.landscape
+
+
+def _orient(photo_ids: list[str], orientations: list[Orientation]) -> dict[str, Orientation]:
+    return dict(zip(photo_ids, orientations))
+
+
+def test_fill_no_orientation_backward_compatible():
+    t = make_template(n_pages=1, slots_per_page=3)
+    result = fill_template(t, ["a", "b", "c"], orientations=None)
+    assert [s.photo_id for s in result.pages[0].slots] == ["a", "b", "c"]
+
+
+def test_fill_empty_orientations_backward_compatible():
+    t = make_template(n_pages=1, slots_per_page=3)
+    result = fill_template(t, ["a", "b", "c"], orientations={})
+    assert [s.photo_id for s in result.pages[0].slots] == ["a", "b", "c"]
+
+
+def test_fill_landscape_slot_picks_landscape_photo():
+    t = make_template_with_orientations(["landscape"])
+    photos = ["portrait_p", "landscape_p"]
+    orientations = _orient(photos, [_PORT, _LAND])
+    result = fill_template(t, photos, orientations=orientations)
+    assert result.pages[0].slots[0].photo_id == "landscape_p"
+
+
+def test_fill_portrait_slot_picks_portrait_photo():
+    t = make_template_with_orientations(["portrait"])
+    photos = ["landscape_p", "portrait_p"]
+    orientations = _orient(photos, [_LAND, _PORT])
+    result = fill_template(t, photos, orientations=orientations)
+    assert result.pages[0].slots[0].photo_id == "portrait_p"
+
+
+def test_fill_falls_back_when_no_matching_orientation():
+    t = make_template_with_orientations(["landscape", "landscape"])
+    photos = ["landscape_p", "portrait_p"]
+    orientations = _orient(photos, [_LAND, _PORT])
+    result = fill_template(t, photos, orientations=orientations)
+    slots = result.pages[0].slots
+    assert slots[0].photo_id == "landscape_p"
+    assert slots[1].photo_id == "portrait_p"  # fallback
+
+
+def test_fill_preserves_rank_within_orientation():
+    t = make_template_with_orientations(["landscape"])
+    photos = ["L1", "L2", "L3"]
+    orientations = _orient(photos, [_LAND, _LAND, _LAND])
+    result = fill_template(t, photos, orientations=orientations)
+    assert result.pages[0].slots[0].photo_id == "L1"  # best-ranked landscape
+
+
+def test_fill_none_required_picks_best_available():
+    t = make_template_with_orientations([None])
+    photos = ["portrait_p", "landscape_p"]
+    orientations = _orient(photos, [_PORT, _LAND])
+    result = fill_template(t, photos, orientations=orientations)
+    assert result.pages[0].slots[0].photo_id == "portrait_p"  # first in ranked list
+
+
+def test_fill_mixed_slots_multi_page():
+    from app.schemas import Page
+    t = Template(
+        id="t1",
+        pages=[
+            Page(id="p0", slots=[Slot(id="s0", required_orientation=_PORT)]),
+            Page(id="p1", slots=[Slot(id="s1", required_orientation=_LAND)]),
+        ],
+    )
+    photos = ["land", "port"]
+    orientations = {"land": _LAND, "port": _PORT}
+    result = fill_template(t, photos, orientations=orientations)
+    assert result.pages[0].slots[0].photo_id == "port"
+    assert result.pages[1].slots[0].photo_id == "land"
+
+
+def test_fill_exhausted_available_gives_none():
+    t = make_template_with_orientations(["landscape", "landscape"])
+    photos = ["L1"]
+    orientations = {"L1": _LAND}
+    result = fill_template(t, photos, orientations=orientations)
+    slots = result.pages[0].slots
+    assert slots[0].photo_id == "L1"
+    assert slots[1].photo_id is None
+
+
+def test_fill_all_none_required_with_orientations_dict():
+    t = make_template_with_orientations([None, None, None])
+    photos = ["a", "b", "c"]
+    orientations = _orient(photos, [_PORT, _LAND, _PORT])
+    result = fill_template(t, photos, orientations=orientations)
+    assert [s.photo_id for s in result.pages[0].slots] == ["a", "b", "c"]

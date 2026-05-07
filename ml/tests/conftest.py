@@ -5,7 +5,7 @@ import pytest
 from PIL import Image
 
 from app.config import Settings
-from app.schemas import Page, ProcessRequest, Slot, Template
+from app.schemas import Orientation, Page, ProcessRequest, Slot, Template
 
 
 # ---------------------------------------------------------------------------
@@ -18,6 +18,28 @@ def make_image_bytes(color: tuple = (128, 128, 128), width: int = 64, height: in
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return buf.getvalue()
+
+
+def make_portrait_image_bytes(width: int = 40, height: int = 80) -> bytes:
+    """PNG image taller than wide → portrait orientation."""
+    return make_image_bytes(width=width, height=height)
+
+
+def make_landscape_image_bytes(width: int = 80, height: int = 40) -> bytes:
+    """PNG image wider than tall → landscape orientation."""
+    return make_image_bytes(width=width, height=height)
+
+
+def make_template_with_orientations(orientations: list[str | None]) -> Template:
+    """Single-page template whose slots have required_orientation from the list."""
+    slots = [
+        Slot(
+            id=f"slot_0_{i}",
+            required_orientation=Orientation(o) if o is not None else None,
+        )
+        for i, o in enumerate(orientations)
+    ]
+    return Template(id="template_1", pages=[Page(id="page_0", slots=slots)])
 
 
 def make_checkerboard_image_bytes(width: int = 64, height: int = 64) -> bytes:

@@ -3,9 +3,15 @@ from enum import Enum
 from pydantic import BaseModel, Field, model_validator
 
 
+class Orientation(str, Enum):
+    portrait = "portrait"
+    landscape = "landscape"
+
+
 class Slot(BaseModel):
     id: str
     photo_id: str | None = None
+    required_orientation: Orientation | None = None
 
 
 class Page(BaseModel):
