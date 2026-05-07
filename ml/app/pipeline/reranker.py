@@ -5,6 +5,8 @@ import clip
 import numpy as np
 import torch
 
+from app.pipeline.embeddings import _model_device
+
 logger = logging.getLogger(__name__)
 
 
@@ -13,12 +15,12 @@ def rerank_by_text(
     embeddings: dict[str, np.ndarray],
     user_description: str,
     model: Any,
-    device: str = "cpu",
 ) -> list[str]:
     if not user_description.strip():
         return photo_ids
 
     try:
+        device = _model_device(model)
         tokens = clip.tokenize([user_description]).to(device)
         with torch.no_grad():
             text_features = model.encode_text(tokens)

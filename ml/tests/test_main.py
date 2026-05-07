@@ -135,3 +135,44 @@ def test_process_pipeline_422_propagated(client):
     ):
         resp = client.post("/process", json=_valid_payload())
     assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Lifespan singletons (Win 5)
+# ---------------------------------------------------------------------------
+
+def test_lifespan_creates_s3_client_and_executor_once():
+    """S3 client and download executor are created at startup and stored on app.state."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    app.dependency_overrides[get_settings] = lambda: _SETTINGS
+    fake_s3 = MagicMock(name="s3-client")
+    with patch("app.main.get_clip_model", return_value=_MOCK_CLIP), \
+         patch("app.main.boto3.client", return_value=fake_s3) as mock_boto3:
+        with TestClient(app):
+            assert app.state.s3_client is fake_s3
+            assert isinstance(app.state.download_executor, ThreadPoolExecutor)
+            assert app.state.clip_model is _MOCK_CLIP[0]
+        # boto3.client must only be called once (singleton)
+        assert mock_boto3.call_count == 1
+    app.dependency_overrides.clear()
+
+
+def test_lifespan_shuts_down_executor_on_exit():
+    """The download executor is shut down when the app exits."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    app.dependency_overrides[get_settings] = lambda: _SETTINGS
+    captured: dict = {}
+    with patch("app.main.get_clip_model", return_value=_MOCK_CLIP), \
+         patch("app.main.boto3.client", return_value=MagicMock()):
+        with TestClient(app):
+            captured["executor"] = app.state.download_executor
+            assert isinstance(captured["executor"], ThreadPoolExecutor)
+
+    # After exit, the executor's internal flag should be set to shutdown.
+    # We check by attempting to submit a new task — should raise RuntimeError.
+    import pytest
+    with pytest.raises(RuntimeError):
+        captured["executor"].submit(lambda: 1)
+    app.dependency_overrides.clear()

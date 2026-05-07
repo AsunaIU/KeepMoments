@@ -1,5 +1,7 @@
-"""Fill front/back covers of a photobook template."""
+"""Fill front/back covers of a photobook template (async)."""
 import logging
+
+from PIL import Image
 
 from app.pipeline.caption_generator import generate_cover_caption
 from app.schemas import CoverConfig, CoverMode, FilledCover, FilledTemplate
@@ -7,10 +9,10 @@ from app.schemas import CoverConfig, CoverMode, FilledCover, FilledTemplate
 logger = logging.getLogger(__name__)
 
 
-def _fill_single_cover(
+async def _fill_single_cover(
     config: CoverConfig,
     ranked_photos: list[str],
-    photo_bytes: dict[str, bytes],
+    images: dict[str, Image.Image],
     user_description: str,
     api_key: str | None,
     model: str | None,
@@ -20,7 +22,6 @@ def _fill_single_cover(
     if config.mode == CoverMode.photo:
         if config.photo_id is not None:
             return FilledCover(mode=config.mode, photo_id=config.photo_id)
-        # Auto-select: front → best (first ranked), back → last ranked
         photo_id = None
         if ranked_photos:
             photo_id = ranked_photos[0] if is_front else ranked_photos[-1]
@@ -30,12 +31,11 @@ def _fill_single_cover(
     if config.text is not None:
         return FilledCover(mode=config.mode, text=config.text)
 
-    # Auto-generate caption
     text = None
     if api_key and model:
-        text = generate_cover_caption(
+        text = await generate_cover_caption(
             ranked_photos=ranked_photos,
-            photo_bytes=photo_bytes,
+            images=images,
             user_description=user_description,
             api_key=api_key,
             model=model,
@@ -44,12 +44,12 @@ def _fill_single_cover(
     return FilledCover(mode=config.mode, text=text)
 
 
-def fill_covers(
+async def fill_covers(
     filled_template: FilledTemplate,
     front_config: CoverConfig | None,
     back_config: CoverConfig | None,
     ranked_photos: list[str],
-    photo_bytes: dict[str, bytes],
+    images: dict[str, Image.Image],
     user_description: str,
     api_key: str | None = None,
     model: str | None = None,
@@ -57,10 +57,10 @@ def fill_covers(
 ) -> FilledTemplate:
     """Return a new FilledTemplate with covers attached; input not mutated."""
     front = (
-        _fill_single_cover(
+        await _fill_single_cover(
             config=front_config,
             ranked_photos=ranked_photos,
-            photo_bytes=photo_bytes,
+            images=images,
             user_description=user_description,
             api_key=api_key,
             model=model,
@@ -70,10 +70,10 @@ def fill_covers(
         if front_config is not None else None
     )
     back = (
-        _fill_single_cover(
+        await _fill_single_cover(
             config=back_config,
             ranked_photos=ranked_photos,
-            photo_bytes=photo_bytes,
+            images=images,
             user_description=user_description,
             api_key=api_key,
             model=model,
