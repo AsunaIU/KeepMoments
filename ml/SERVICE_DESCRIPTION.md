@@ -30,7 +30,12 @@ FastAPI-сервис для автоматического подбора и р�
   "template": {
     "id": "template_1",
     "pages": [
-      {"id": "page_1", "slots": [{"id": "slot_1", "photo_id": null}]}
+      {
+        "id": "page_1",
+        "slots": [
+          {"id": "slot_1", "photo_id": null, "required_orientation": "landscape"}
+        ]
+      }
     ],
     "front_cover": {"mode": "caption", "text": null},
     "back_cover": {"mode": "photo", "photo_id": null}
@@ -39,6 +44,8 @@ FastAPI-сервис для автоматического подбора и р�
 ```
 
 `front_cover` и `back_cover` — опциональны. Поле `mode` принимает значения `"caption"` (обложка с текстом) или `"photo"` (обложка с фото). При `null`-значениях текст/фото генерируются/выбираются автоматически.
+
+Поле слота `required_orientation` принимает значения `"portrait"`, `"landscape"` или `null`. При `null` ориентация не ограничивается. Квадратные фото считаются landscape.
 
 **Выходные данные (`ProcessResponse`):**
 
@@ -97,7 +104,9 @@ flowchart TD
     subgraph pipeline["🔄 Основной пайплайн"]
         C["☁️ Шаг 1: Загрузка из S3\n━━━━━━━━━━━━━━━━━━━\n• Параллельная загрузка через ThreadPoolExecutor\n• Вход: photo_ids + S3 credentials\n• Выход: dict[photo_id → bytes]\n• Ошибки: пропуск с логированием"]
 
-        C --> V1{Доступных фото\n≥ min_photos?}
+        C --> ORI["📐 Шаг 1б: Определение ориентации\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n• PIL.Image → width / height\n• width ≥ height → landscape\n• width < height → portrait\n• Квадрат → landscape\n• Выход: dict[photo_id → Orientation]"]
+
+        ORI --> V1{Доступных фото\n≥ min_photos?}
         V1 -->|Нет| ERR1([❌ HTTP 503\nНедостаточно фото])
         V1 -->|Да| D
 
@@ -115,7 +124,7 @@ flowchart TD
 
         I --> J["🔤 Шаг 8: Переранжирование\nпо тексту (CLIP Text Encoder)\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n• Токенизация user_description\n• Текстовый вектор (L2-норм.)\n• Косинусное сходство:\n  text_vec · photo_embed\n• Сортировка по сходству (убывание)\n• Выход: list[photo_ids] по релевантности"]
 
-        J --> K["📋 Шаг 9: Заполнение шаблона\n━━━━━━━━━━━━━━━━━━━━━━━━\n• Перебор ranked photos\n• Обход: Pages → Slots (по порядку)\n• Последовательное назначение\n  photo_id → slot\n• Незаполненные слоты → null\n• Выход: FilledTemplate"]
+        J --> K["📋 Шаг 9: Заполнение шаблона\n━━━━━━━━━━━━━━━━━━━━━━━━\n• Обход: Pages → Slots (по порядку)\n• Slot.required_orientation задан:\n  ищем фото с совпадающей ориент.\n  → fallback: первое доступное\n• required_orientation = null:\n  берём первое из ranked\n• Незаполненные слоты → null\n• Выход: FilledTemplate"]
 
         K --> CAP["💬 Шаг 10: Генерация подписей\n(AI Caption Generator)\n━━━━━━━━━━━━━━━━━━━━━━━━\n• Anthropic Claude или OpenRouter\n• Одна подпись на каждую страницу\n• Изображения → base64 JPEG ≤512px\n• Промпт: тема альбома + номер стр.\n• Пропускается без API-ключа\n• Выход: FilledTemplate + captions"]
 
@@ -130,6 +139,7 @@ flowchart TD
     style async fill:#FFF9E6,stroke:#F0C040
     style pipeline fill:#F0F8FF,stroke:#4A90D9
     style V1 fill:#F39C12,color:#fff,stroke:#D68910
+    style ORI fill:#8E44AD,color:#fff,stroke:#6C3483
 ```
 
 ---
@@ -156,10 +166,12 @@ Clustering           (Sharpness +          Re-ranking
 
 | Шаг | Цель | Метод |
 |-----|------|-------|
+| Ориентация | Классификация portrait / landscape | PIL размеры изображения |
 | Кластеризация | Покрытие визуального пространства | KMeans на CLIP-эмбеддингах |
 | Quality Score | Технически хорошие снимки | Лапласиан + яркость |
 | Round-Robin | Баланс разнообразия и качества | Циклический обход кластеров |
 | Text Re-rank | Соответствие описанию пользователя | Косинусное сходство CLIP |
+| Template Fill | Укладка фото в слоты с учётом ориентации | Жадный поиск по ориентации + fallback |
 | Caption Gen | Контекстные подписи к страницам | Multimodal LLM (Claude / OpenRouter) |
 | Cover Fill | Заполнение обложек альбома | Авто-выбор фото + LLM для названия |
 
@@ -172,6 +184,8 @@ Clustering           (Sharpness +          Re-ranking
 | Сценарий | Поведение |
 |----------|-----------|
 | Ошибка загрузки отдельного фото из S3 | Лог-предупреждение, фото пропускается |
+| Ошибка определения ориентации фото | Лог-предупреждение, фото пропускается из словаря ориентаций |
+| Нет фото подходящей ориентации для слота | Fallback: первое доступное фото |
 | Ошибка препроцессинга изображения | Лог-предупреждение, фото пропускается |
 | Ошибка расчёта качества | Оценка качества = 0.0 |
 | Пустое `user_description` | Порядок из Round-Robin сохраняется |
@@ -200,7 +214,8 @@ ml/
 │       ├── quality.py       # Оценка резкости и экспозиции
 │       ├── selector.py      # Round-robin отбор
 │       ├── reranker.py      # CLIP text encoder + переранжирование
-│       ├── template_filler.py # Заполнение шаблона
+│       ├── orientation.py     # Определение ориентации фото (portrait / landscape)
+│       ├── template_filler.py # Заполнение шаблона с учётом ориентации слотов
 │       ├── caption_generator.py # LLM-генерация подписей (Anthropic / OpenRouter)
 │       └── cover_filler.py  # Заполнение обложек (фото или подпись)
 ├── Dockerfile

@@ -7,6 +7,7 @@ from app.schemas import (
     FilledCover,
     FilledSlot,
     FilledTemplate,
+    Orientation,
     ProcessRequest,
     Slot,
     Template,
@@ -191,3 +192,21 @@ def test_filled_template_without_covers_defaults_none():
     ft = FilledTemplate(id="t1", pages=[])
     assert ft.front_cover is None
     assert ft.back_cover is None
+
+
+# ---------------------------------------------------------------------------
+# Orientation field tests
+# ---------------------------------------------------------------------------
+
+def test_slot_default_required_orientation_is_none():
+    assert Slot(id="s1").required_orientation is None
+
+
+def test_slot_portrait_orientation_from_string():
+    slot = Slot(id="s1", required_orientation="portrait")
+    assert slot.required_orientation == Orientation.portrait
+
+
+def test_slot_landscape_orientation_from_string():
+    slot = Slot(id="s1", required_orientation="landscape")
+    assert slot.required_orientation == Orientation.landscape

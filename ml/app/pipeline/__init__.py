@@ -12,6 +12,7 @@ from app.pipeline.clustering import cluster_photos
 from app.pipeline.quality import score_quality
 from app.pipeline.selector import select_photos
 from app.pipeline.reranker import rerank_by_text
+from app.pipeline.orientation import detect_orientation
 from app.pipeline.template_filler import count_template_slots, fill_template
 from app.pipeline.caption_generator import generate_captions, _OPENROUTER_BASE_URL
 from app.pipeline.cover_filler import fill_covers
@@ -32,6 +33,9 @@ def _run_pipeline_sync(
 ) -> FilledTemplate:
     # 1. Download photos from S3
     photo_bytes = download_photos(request.photo_ids, settings.S3_BUCKET_NAME, s3_client)
+
+    # 1b. Detect photo orientations
+    orientations = detect_orientation(photo_bytes)
 
     if not photo_bytes:
         raise HTTPException(status_code=503, detail="No photos could be downloaded from S3")
@@ -68,7 +72,7 @@ def _run_pipeline_sync(
     ranked = rerank_by_text(selected, embeddings, request.user_description, clip_model)
 
     # 9. Fill template slots in document order
-    filled = fill_template(request.template, ranked)
+    filled = fill_template(request.template, ranked, orientations=orientations)
 
     # 10. Generate per-page captions (skipped if no caption API key is configured)
     if settings.OPENROUTER_API_KEY:
