@@ -9,5 +9,6 @@ data class SelectedPhoto(
     val width: Int?,
     val height: Int?,
     val isValid: Boolean,
-    val validationMessage: String?
+    val validationMessage: String?,
+    val position: Int = 0
 )

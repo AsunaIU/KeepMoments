@@ -1,6 +1,8 @@
 package com.example.myapplication.model
 
 data class RenderedBook(
+    val draftId: String,
+    val templateId: String,
     val filledTemplate: FilledTemplate
 )
 
@@ -16,7 +18,7 @@ data class BookPage(
 
 data class BookSlot(
     val id: String,
+    // For local preview/PDF we store Uri.toString() here.
     val photoId: String,
-    val caption: String,
-    val orientation: String
+    val caption: String = ""
 )

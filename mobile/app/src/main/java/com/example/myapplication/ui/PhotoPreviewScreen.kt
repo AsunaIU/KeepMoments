@@ -2,6 +2,7 @@ package com.example.myapplication.ui
 
 import android.net.Uri
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,10 +23,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.AddPhotoAlternate
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -37,36 +41,38 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.example.myapplication.model.BookDraftUiState
+import com.example.myapplication.model.DraftOwnerType
 import com.example.myapplication.model.SelectedPhoto
-import com.example.myapplication.ui.theme.Border
+import com.example.myapplication.ui.theme.Blue40
+import com.example.myapplication.ui.theme.KeepMomentsTheme
 import com.example.myapplication.ui.theme.ScreenBg
 import com.example.myapplication.ui.theme.TextSecondary
-import com.example.myapplication.viewmodel.BookCreationViewModel
+import com.example.myapplication.viewmodel.DraftEditorUiState
+import com.example.myapplication.viewmodel.DraftEditorViewModel
+
+private val InvalidPhotoBorder = Color(0xFFD84C4C)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PhotoPreviewScreen(
-    uiState: BookDraftUiState,
+    uiState: DraftEditorUiState,
     onBackClick: () -> Unit,
     onAddMoreClick: () -> Unit,
     onRemoveClick: (String) -> Unit,
     onContinueClick: () -> Unit,
+    onOpenDraftsClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val validPhotosCount = uiState.selectedPhotos.count { it.isValid }
+
     Scaffold(
         modifier = modifier,
         containerColor = ScreenBg,
@@ -76,11 +82,17 @@ fun PhotoPreviewScreen(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             text = "Выбор фото",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.Black
                         )
+                        Spacer(Modifier.height(2.dp))
                         Text(
-                            text = "${uiState.selectedPhotos.size}/${BookCreationViewModel.PHOTO_LIMIT} выбрано",
+                            text = when {
+                                uiState.isLoading -> "Загружаем черновик"
+                                uiState.isMissing -> "Черновик недоступен"
+                                else -> "${uiState.selectedPhotos.size}/${DraftEditorViewModel.PHOTO_LIMIT} выбрано"
+                            },
                             fontSize = 13.sp,
                             color = TextSecondary
                         )
@@ -90,87 +102,116 @@ fun PhotoPreviewScreen(
                     IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Назад"
+                            contentDescription = "Назад",
                         )
                     }
                 }
             )
         },
         bottomBar = {
-            Surface(
-                color = ScreenBg,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-            ) {
-                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                    if (uiState.invalidPhotos.isNotEmpty()) {
-                        Text(
-                            text = "Фото с предупреждением останутся в сетке, но не попадут в генерацию",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFFB42318)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                    }
-
-                    Button(
-                        onClick = onContinueClick,
-                        enabled = uiState.canContinue,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp),
-                        shape = RoundedCornerShape(18.dp)
+            if (!uiState.isMissing) {
+                Surface(
+                    color = ScreenBg,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = "Далее",
-                            fontWeight = FontWeight.SemiBold
+                            text = "Валидных фото: $validPhotosCount",
+                            color = TextSecondary,
+                            style = MaterialTheme.typography.bodySmall
                         )
+                        Button(
+                            onClick = onContinueClick,
+                            enabled = uiState.canContinue && !uiState.isGeneratingBook && !uiState.isLoading,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp),
+                            shape = RoundedCornerShape(18.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Blue40,
+                                disabledContainerColor = Blue40.copy(alpha = 0.45f)
+                            )
+                        ) {
+                            if (uiState.isGeneratingBook) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = Color.White
+                                )
+                            } else {
+                                Text(
+                                    text = "Далее",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
     ) { innerPadding ->
-        if (uiState.selectedPhotos.isEmpty()) {
-            EmptyPhotosState(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                onAddMoreClick = onAddMoreClick
-            )
-        } else {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .padding(horizontal = 16.dp)
-            ) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Подходящий формат: ${uiState.validPhotos.size} · С ошибкой: ${uiState.invalidPhotos.size}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondary
-                )
-                Spacer(modifier = Modifier.height(12.dp))
-
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 140.dp),
-                    modifier = Modifier.fillMaxSize(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    contentPadding = PaddingValues(bottom = 20.dp)
+        when {
+            uiState.isLoading -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding),
+                    contentAlignment = Alignment.Center
                 ) {
-                    items(uiState.selectedPhotos, key = { it.id }) { photo ->
-                        SelectedPhotoGridItem(
-                            photo = photo,
-                            onRemoveClick = { onRemoveClick(photo.id) }
-                        )
-                    }
+                    CircularProgressIndicator()
+                }
+            }
 
-                    item {
-                        AddMoreTile(
-                            enabled = uiState.selectedPhotos.size < BookCreationViewModel.PHOTO_LIMIT,
-                            onClick = onAddMoreClick
-                        )
+            uiState.isMissing -> {
+                MissingDraftState(
+                    modifier = Modifier.padding(innerPadding),
+                    onOpenDraftsClick = onOpenDraftsClick
+                )
+            }
+
+            else -> {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .padding(horizontal = 12.dp)
+                ) {
+                    Spacer(Modifier.height(8.dp))
+
+                    OwnerHint(ownerType = uiState.ownerType)
+
+                    Spacer(Modifier.height(12.dp))
+
+                    if (uiState.selectedPhotos.isEmpty()) {
+                        EmptyDraftPhotosState(onAddMoreClick = onAddMoreClick)
+                    } else {
+                        LazyVerticalGrid(
+                            columns = GridCells.Adaptive(minSize = 140.dp),
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(bottom = 16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            items(uiState.selectedPhotos, key = { it.id }) { photo ->
+                                SelectedPhotoTile(
+                                    photo = photo,
+                                    onRemoveClick = { onRemoveClick(photo.id) }
+                                )
+                            }
+
+                            item {
+                                AddMoreTile(
+                                    enabled = uiState.selectedPhotos.size < DraftEditorViewModel.PHOTO_LIMIT,
+                                    onClick = onAddMoreClick
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -179,143 +220,153 @@ fun PhotoPreviewScreen(
 }
 
 @Composable
-private fun EmptyPhotosState(
+private fun OwnerHint(ownerType: DraftOwnerType?) {
+    val text = when (ownerType) {
+        DraftOwnerType.USER -> "Этот черновик привязан к аккаунту и скроется после выхода."
+        DraftOwnerType.GUEST -> "Гостевой черновик останется доступным на устройстве и без входа."
+        null -> ""
+    }
+    if (text.isNotBlank()) {
+        Text(
+            text = text,
+            color = TextSecondary,
+            style = MaterialTheme.typography.bodyMedium
+        )
+    }
+}
+
+@Composable
+private fun MissingDraftState(
     modifier: Modifier = Modifier,
-    onAddMoreClick: () -> Unit
+    onOpenDraftsClick: () -> Unit
 ) {
-    Column(
-        modifier = modifier.padding(horizontal = 24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+    Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = "Пока нет выбранных фото",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = "Добавьте хотя бы одно фото, чтобы перейти дальше",
-            style = MaterialTheme.typography.bodyMedium,
-            color = TextSecondary
-        )
-        Spacer(modifier = Modifier.height(20.dp))
-        Button(onClick = onAddMoreClick) {
-            Text("Выбрать фото")
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "Черновик недоступен",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = "Возможно, он принадлежит другому аккаунту или был удалён.",
+                color = TextSecondary
+            )
+            Button(onClick = onOpenDraftsClick) {
+                Text("К списку черновиков")
+            }
         }
     }
 }
 
 @Composable
-private fun SelectedPhotoGridItem(
+private fun EmptyDraftPhotosState(
+    onAddMoreClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "Черновик пуст",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = "Добавьте ещё фото, чтобы продолжить.",
+                color = TextSecondary
+            )
+            Button(onClick = onAddMoreClick) {
+                Text("Добавить фото")
+            }
+        }
+    }
+}
+
+@Composable
+private fun SelectedPhotoTile(
     photo: SelectedPhoto,
     onRemoveClick: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(1f)
+            .clip(RoundedCornerShape(18.dp))
+            .then(
+                if (!photo.isValid) {
+                    Modifier.border(2.dp, InvalidPhotoBorder, RoundedCornerShape(18.dp))
+                } else {
+                    Modifier
+                }
+            )
+    ) {
+        AsyncImage(
+            model = Uri.parse(photo.uriString),
+            contentDescription = photo.displayName,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop
+        )
+
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(0.78f)
-                .clip(RoundedCornerShape(18.dp))
-                .background(Color.White)
-                .then(
-                    if (photo.isValid) {
-                        Modifier
-                    } else {
-                        Modifier.drawBehind {
-                            drawRoundRect(
-                                color = Color(0xFFD92D20),
-                                cornerRadius = CornerRadius(18.dp.toPx(), 18.dp.toPx()),
-                                style = Stroke(width = 3.dp.toPx())
-                            )
-                        }
-                    }
-                )
+                .padding(8.dp)
+                .align(Alignment.TopEnd)
+                .size(28.dp)
+                .clip(CircleShape)
+                .background(Color.Black.copy(alpha = 0.55f))
+                .clickable(onClick = onRemoveClick),
+            contentAlignment = Alignment.Center
         ) {
-            AsyncImage(
-                model = Uri.parse(photo.uriString),
-                contentDescription = photo.displayName,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
+            Icon(
+                imageVector = Icons.Default.Delete,
+                contentDescription = "Удалить",
+                tint = Color.White,
+                modifier = Modifier.size(16.dp)
             )
+        }
 
-            RemoveButton(
+        if (!photo.isValid) {
+            Box(
                 modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(8.dp),
-                onClick = onRemoveClick
-            )
+                    .padding(8.dp)
+                    .align(Alignment.TopStart)
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(InvalidPhotoBorder),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.WarningAmber,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
 
-            if (!photo.isValid) {
-                WarningBadge(
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(8.dp)
+            Surface(
+                color = InvalidPhotoBorder.copy(alpha = 0.94f),
+                modifier = Modifier.align(Alignment.BottomStart)
+            ) {
+                Text(
+                    text = photo.validationMessage.orEmpty(),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
-
-        Text(
-            text = photo.displayName ?: "Без названия",
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-
-        Text(
-            text = if (photo.isValid) {
-                buildMetaText(photo = photo)
-            } else {
-                photo.validationMessage ?: "Фото не прошло проверку"
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = if (photo.isValid) TextSecondary else Color(0xFFD92D20),
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-}
-
-@Composable
-private fun RemoveButton(
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    Box(
-        modifier = modifier
-            .size(28.dp)
-            .clip(CircleShape)
-            .background(Color.Black.copy(alpha = 0.55f))
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
-    ) {
-        Icon(
-            imageVector = Icons.Default.Close,
-            contentDescription = "Удалить фото",
-            tint = Color.White,
-            modifier = Modifier.size(16.dp)
-        )
-    }
-}
-
-@Composable
-private fun WarningBadge(
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .clip(CircleShape)
-            .background(Color(0xFFD92D20))
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = "⚠",
-            color = Color.White,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold
-        )
     }
 }
 
@@ -324,76 +375,72 @@ private fun AddMoreTile(
     enabled: Boolean,
     onClick: () -> Unit
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(0.78f)
-                .clip(RoundedCornerShape(18.dp))
-                .dashedRoundedBorder(
-                    color = Border,
-                    strokeWidth = 1.5.dp
-                )
-                .background(Color.Transparent)
-                .clickable(enabled = enabled, onClick = onClick),
-            contentAlignment = Alignment.Center
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(1f)
+            .clip(RoundedCornerShape(18.dp))
+            .background(Color.White)
+            .border(1.5.dp, Color(0xFFD7D3F5), RoundedCornerShape(18.dp))
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Image,
-                    contentDescription = "Добавить фото",
-                    tint = TextSecondary
-                )
-                Text(
-                    text = "Добавить",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondary
-                )
-            }
+            Icon(
+                imageVector = Icons.Default.AddPhotoAlternate,
+                contentDescription = "Добавить фото",
+                tint = TextSecondary
+            )
+            Text(
+                text = "Добавить",
+                color = TextSecondary,
+                style = MaterialTheme.typography.bodyMedium
+            )
         }
+    }
+}
 
-        Text(
-            text = if (enabled) "Открыть галерею" else "Лимит достигнут",
-            style = MaterialTheme.typography.bodySmall,
-            color = TextSecondary
+@Preview(showBackground = true, backgroundColor = 0xFFF8F8FC)
+@Composable
+private fun PhotoPreviewScreenPreview() {
+    KeepMomentsTheme {
+        PhotoPreviewScreen(
+            uiState = DraftEditorUiState(
+                draftId = "draft-1",
+                ownerType = DraftOwnerType.GUEST,
+                selectedPhotos = listOf(
+                    SelectedPhoto(
+                        id = "1",
+                        uriString = "",
+                        displayName = "preview.jpg",
+                        mimeType = "image/jpeg",
+                        sizeBytes = 1024,
+                        width = 1600,
+                        height = 1200,
+                        isValid = true,
+                        validationMessage = null
+                    ),
+                    SelectedPhoto(
+                        id = "2",
+                        uriString = "",
+                        displayName = "small.png",
+                        mimeType = "image/png",
+                        sizeBytes = 1024,
+                        width = 800,
+                        height = 800,
+                        isValid = false,
+                        validationMessage = "Фото слишком маленькое для хорошего качества"
+                    )
+                )
+            ),
+            onBackClick = {},
+            onAddMoreClick = {},
+            onRemoveClick = {},
+            onContinueClick = {},
+            onOpenDraftsClick = {}
         )
     }
-}
-
-private fun buildMetaText(photo: SelectedPhoto): String {
-    val width = photo.width ?: 0
-    val height = photo.height ?: 0
-    val sizeMb = photo.sizeBytes?.div(1024f * 1024f)
-
-    return if (sizeMb != null) {
-        "${width}x${height} · ${String.format("%.1f", sizeMb)} МБ"
-    } else {
-        "${width}x${height}"
-    }
-}
-
-private fun Modifier.dashedRoundedBorder(
-    color: Color,
-    strokeWidth: Dp,
-) = drawBehind {
-    val strokePx = strokeWidth.toPx()
-    val dash = floatArrayOf(10f, 8f)
-    val effect = PathEffect.dashPathEffect(dash, 0f)
-
-    val left = strokePx / 2
-    val top = strokePx / 2
-    val right = size.width - strokePx / 2
-    val bottom = size.height - strokePx / 2
-    val radius = CornerRadius(18.dp.toPx(), 18.dp.toPx())
-
-    drawRoundRect(
-        color = color,
-        topLeft = Offset(left, top),
-        size = androidx.compose.ui.geometry.Size(right - left, bottom - top),
-        cornerRadius = radius,
-        style = Stroke(width = strokePx, pathEffect = effect)
-    )
 }

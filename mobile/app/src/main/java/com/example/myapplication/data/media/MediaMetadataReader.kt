@@ -24,6 +24,8 @@ class AndroidMediaMetadataReader(
     override fun read(uri: Uri): MediaMetadata {
         var displayName: String? = null
         var sizeBytes: Long? = null
+        var width: Int? = null
+        var height: Int? = null
 
         contentResolver.query(
             uri,
@@ -45,15 +47,14 @@ class AndroidMediaMetadataReader(
             }
         }
 
-        val bounds = BitmapFactory.Options().apply {
-            inJustDecodeBounds = true
-        }
         contentResolver.openInputStream(uri)?.use { inputStream ->
-            BitmapFactory.decodeStream(inputStream, null, bounds)
+            val options = BitmapFactory.Options().apply {
+                inJustDecodeBounds = true
+            }
+            BitmapFactory.decodeStream(inputStream, null, options)
+            width = options.outWidth.takeIf { it > 0 }
+            height = options.outHeight.takeIf { it > 0 }
         }
-
-        val width = bounds.outWidth.takeIf { it > 0 }
-        val height = bounds.outHeight.takeIf { it > 0 }
 
         return MediaMetadata(
             displayName = displayName,

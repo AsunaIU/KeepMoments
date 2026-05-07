@@ -17,7 +17,9 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -36,22 +38,28 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.example.myapplication.model.BookPage
+import com.example.myapplication.model.BookSlot
+import com.example.myapplication.model.FilledTemplate
 import com.example.myapplication.model.RenderedBook
+import com.example.myapplication.ui.theme.KeepMomentsTheme
 import com.example.myapplication.ui.theme.ScreenBg
 import com.example.myapplication.ui.theme.TextSecondary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RenderedBookScreen(
-    book: RenderedBook,
+    book: RenderedBook?,
+    isExporting: Boolean,
     onBackClick: () -> Unit,
+    onProfileClick: () -> Unit,
     onDownloadPdfClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val pages = book.filledTemplate.pages
+    val pages = book?.filledTemplate?.pages.orEmpty()
     val pagerState = rememberPagerState(pageCount = { pages.size })
 
     Scaffold(
@@ -76,6 +84,14 @@ fun RenderedBookScreen(
                             contentDescription = "Назад"
                         )
                     }
+                },
+                actions = {
+                    IconButton(onClick = onProfileClick) {
+                        Icon(
+                            imageVector = Icons.Default.AccountCircle,
+                            contentDescription = "Мой профиль"
+                        )
+                    }
                 }
             )
         },
@@ -88,16 +104,24 @@ fun RenderedBookScreen(
             ) {
                 Button(
                     onClick = onDownloadPdfClick,
-                    enabled = pages.isNotEmpty(),
+                    enabled = pages.isNotEmpty() && !isExporting,
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 12.dp)
                         .height(48.dp)
                 ) {
-                    Text(
-                        text = "Скачать PDF",
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    if (isExporting) {
+                        CircularProgressIndicator(
+                            color = Color.White,
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.height(18.dp)
+                        )
+                    } else {
+                        Text(
+                            text = "Скачать PDF",
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                 }
             }
         }
@@ -202,26 +226,28 @@ private fun BookPageContent(
                             contentScale = ContentScale.Crop
                         )
 
-                        Surface(
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .padding(horizontal = 24.dp, vertical = 20.dp),
-                            shape = RoundedCornerShape(14.dp),
-                            color = Color.White.copy(alpha = 0.86f)
-                        ) {
-                            Text(
-                                text = slot.caption.ifBlank { " " },
-                                style = MaterialTheme.typography.titleMedium.copy(
-                                    fontFamily = FontFamily.Serif,
-                                    fontStyle = FontStyle.Italic,
-                                    fontWeight = FontWeight.Normal
-                                ),
-                                color = Color.Black,
-                                textAlign = TextAlign.Center,
+                        if (slot.caption.isNotBlank()) {
+                            Surface(
                                 modifier = Modifier
-                                    .widthIn(max = 260.dp)
-                                    .padding(horizontal = 18.dp, vertical = 10.dp)
-                            )
+                                    .align(Alignment.BottomCenter)
+                                    .padding(horizontal = 24.dp, vertical = 20.dp),
+                                shape = RoundedCornerShape(14.dp),
+                                color = Color.White.copy(alpha = 0.86f)
+                            ) {
+                                Text(
+                                    text = slot.caption,
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontFamily = FontFamily.Serif,
+                                        fontStyle = FontStyle.Italic,
+                                        fontWeight = FontWeight.Normal
+                                    ),
+                                    color = Color.Black,
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier
+                                        .widthIn(max = 260.dp)
+                                        .padding(horizontal = 18.dp, vertical = 10.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -236,5 +262,37 @@ private fun BookPageContent(
                 modifier = Modifier.fillMaxWidth()
             )
         }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun PreviewRenderedBookScreen() {
+    KeepMomentsTheme {
+        RenderedBookScreen(
+            book = RenderedBook(
+                draftId = "draft-1",
+                templateId = "single-photo-v1-2",
+                filledTemplate = FilledTemplate(
+                    id = "single-photo-v1-2",
+                    pages = listOf(
+                        BookPage(
+                            id = "page-1",
+                            slots = listOf(
+                                BookSlot(
+                                    id = "slot-1",
+                                    photoId = "",
+                                    caption = ""
+                                )
+                            )
+                        )
+                    )
+                )
+            ),
+            isExporting = false,
+            onBackClick = {},
+            onProfileClick = {},
+            onDownloadPdfClick = {}
+        )
     }
 }
