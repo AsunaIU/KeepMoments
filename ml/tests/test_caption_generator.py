@@ -1,11 +1,16 @@
+"""Tests for caption_generator.
+
+Win 2: functions accept dict[str, PIL.Image] instead of dict[str, bytes].
+Win 1: functions are async and per-page calls run concurrently.
+"""
+import asyncio
 import base64
 import io
-from unittest.mock import MagicMock, patch
+import time
+from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from PIL import Image
 
-import app.pipeline.caption_generator as mod
 from app.pipeline.caption_generator import (
     _OPENROUTER_BASE_URL,
     _caption_single_page,
@@ -14,24 +19,24 @@ from app.pipeline.caption_generator import (
     generate_cover_caption,
 )
 from app.schemas import FilledPage, FilledSlot, FilledTemplate
+from tests.conftest import make_pil_image
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _png_bytes(width: int = 64, height: int = 64, color=(100, 150, 200)) -> bytes:
-    img = Image.new("RGB", (width, height), color)
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    return buf.getvalue()
+def _anthropic_response(text: str) -> MagicMock:
+    resp = MagicMock()
+    resp.content = [MagicMock(text=text)]
+    return resp
 
 
-def _rgba_png_bytes() -> bytes:
-    img = Image.new("RGBA", (32, 32), (100, 150, 200, 128))
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    return buf.getvalue()
+def _openrouter_response(text: str) -> MagicMock:
+    resp = MagicMock()
+    resp.json.return_value = {"choices": [{"message": {"content": text}}]}
+    resp.raise_for_status = MagicMock()
+    return resp
 
 
 def _make_filled_template(n_pages: int = 2, slots_per_page: int = 1) -> FilledTemplate:
@@ -46,95 +51,79 @@ def _make_filled_template(n_pages: int = 2, slots_per_page: int = 1) -> FilledTe
     return FilledTemplate(id="template_1", pages=pages)
 
 
-def _anthropic_response(text: str) -> MagicMock:
-    resp = MagicMock()
-    resp.content = [MagicMock(text=text)]
-    return resp
+def _make_anthropic_mock(create_return=None, create_side_effect=None) -> MagicMock:
+    client = MagicMock()
+    client.messages.create = AsyncMock(
+        return_value=create_return,
+        side_effect=create_side_effect,
+    )
+    return client
 
 
-def _openrouter_response(text: str) -> MagicMock:
-    resp = MagicMock()
-    resp.json.return_value = {"choices": [{"message": {"content": text}}]}
-    return resp
-
-
-# ---------------------------------------------------------------------------
-# Fixture: reset module-level singletons between tests
-# ---------------------------------------------------------------------------
-
-@pytest.fixture(autouse=True)
-def reset_clients():
-    mod._anthropic_client = None
-    mod._httpx_client = None
-    yield
-    mod._anthropic_client = None
-    mod._httpx_client = None
+def _make_httpx_mock(post_return=None, post_side_effect=None) -> MagicMock:
+    client = MagicMock()
+    client.post = AsyncMock(return_value=post_return, side_effect=post_side_effect)
+    client.aclose = AsyncMock()
+    return client
 
 
 # ---------------------------------------------------------------------------
-# _encode_image tests
+# _encode_image — now takes PIL.Image (Win 2)
 # ---------------------------------------------------------------------------
 
 def test_encode_image_returns_base64_jpeg():
-    b64, media_type = _encode_image(_png_bytes())
+    b64, media_type = _encode_image(make_pil_image())
     assert media_type == "image/jpeg"
     raw = base64.standard_b64decode(b64)
     assert raw[:2] == b"\xff\xd8"  # JPEG magic bytes
 
 
-def test_encode_image_rgba_converts_to_rgb():
-    b64, _ = _encode_image(_rgba_png_bytes())
-    raw = base64.standard_b64decode(b64)
-    img = Image.open(io.BytesIO(raw))
-    assert img.mode == "RGB"
-
-
 def test_encode_image_large_image_is_resized():
-    b64, _ = _encode_image(_png_bytes(width=1024, height=768))
-    raw = base64.standard_b64decode(b64)
-    img = Image.open(io.BytesIO(raw))
+    big = make_pil_image(width=1024, height=768)
+    b64, _ = _encode_image(big)
+    img = Image.open(io.BytesIO(base64.standard_b64decode(b64)))
     assert max(img.size) <= 512
 
 
-def test_encode_image_invalid_bytes_raises():
-    with pytest.raises(Exception):
-        _encode_image(b"not an image")
+def test_encode_image_does_not_mutate_original():
+    """Encoding for caption must not shrink the cached PIL.Image used elsewhere."""
+    img = make_pil_image(width=1024, height=768)
+    _encode_image(img)
+    assert img.size == (1024, 768)
 
 
 # ---------------------------------------------------------------------------
-# _caption_single_page — Anthropic backend (base_url=None)
+# _caption_single_page (async)
 # ---------------------------------------------------------------------------
 
 _PAGE = FilledPage(id="page_0", slots=[FilledSlot(id="slot_0", photo_id="photo_A")])
-_PHOTO_BYTES = {"photo_A": _png_bytes()}
+_IMAGES = {"photo_A": make_pil_image()}
 
-_ANTHROPIC_KWARGS = dict(
+_BASE_KWARGS = dict(
     page_index=0,
     total_pages=2,
-    photo_bytes=_PHOTO_BYTES,
+    images=_IMAGES,
     user_description="summer wedding",
     api_key="test-key",
     model="claude-haiku-4-5-20251001",
-    base_url=None,
 )
 
 
-def test_caption_single_page_anthropic_happy_path():
-    with patch("app.pipeline.caption_generator._get_anthropic_client") as mock_get:
-        mock_get.return_value.messages.create.return_value = _anthropic_response("  A sunny wedding day.  ")
-        result = _caption_single_page(page=_PAGE, **_ANTHROPIC_KWARGS)
+async def test_caption_single_page_anthropic_happy_path():
+    client = _make_anthropic_mock(create_return=_anthropic_response("  A sunny wedding day.  "))
+    result = await _caption_single_page(_PAGE, **_BASE_KWARGS, base_url=None, client=client)
     assert result == "A sunny wedding day."
 
 
-def test_caption_single_page_no_photo_ids_returns_none():
+async def test_caption_single_page_no_photo_ids_returns_none():
     page = FilledPage(id="page_0", slots=[FilledSlot(id="slot_0", photo_id=None)])
-    with patch("app.pipeline.caption_generator._get_anthropic_client") as mock_get:
-        result = _caption_single_page(page=page, **_ANTHROPIC_KWARGS)
-    mock_get.assert_not_called()
+    client = _make_anthropic_mock()
+    result = await _caption_single_page(page, **_BASE_KWARGS, base_url=None, client=client)
+    client.messages.create.assert_not_called()
     assert result is None
 
 
-def test_caption_single_page_missing_photo_bytes_skips_photo():
+async def test_caption_single_page_missing_image_skips():
     page = FilledPage(
         id="page_0",
         slots=[
@@ -142,38 +131,28 @@ def test_caption_single_page_missing_photo_bytes_skips_photo():
             FilledSlot(id="slot_1", photo_id="photo_A"),
         ],
     )
-    with patch("app.pipeline.caption_generator._get_anthropic_client") as mock_get:
-        mock_get.return_value.messages.create.return_value = _anthropic_response("Caption.")
-        result = _caption_single_page(page=page, **_ANTHROPIC_KWARGS)
+    client = _make_anthropic_mock(create_return=_anthropic_response("Caption."))
+    result = await _caption_single_page(page, **_BASE_KWARGS, base_url=None, client=client)
     assert result == "Caption."
-    content = mock_get.return_value.messages.create.call_args.kwargs["messages"][0]["content"]
+    content = client.messages.create.call_args.kwargs["messages"][0]["content"]
     assert len([b for b in content if b["type"] == "image"]) == 1
 
 
-def test_caption_single_page_all_photos_missing_returns_none():
-    with patch("app.pipeline.caption_generator._get_anthropic_client") as mock_get:
-        result = _caption_single_page(page=_PAGE, **{**_ANTHROPIC_KWARGS, "photo_bytes": {}})
-    mock_get.return_value.messages.create.assert_not_called()
+async def test_caption_single_page_all_photos_missing_returns_none():
+    client = _make_anthropic_mock()
+    kwargs = {**_BASE_KWARGS, "images": {}}
+    result = await _caption_single_page(_PAGE, **kwargs, base_url=None, client=client)
+    client.messages.create.assert_not_called()
     assert result is None
 
 
-def test_caption_single_page_encode_failure_returns_none():
-    with patch("app.pipeline.caption_generator._get_anthropic_client") as mock_get:
-        with patch("app.pipeline.caption_generator._encode_image", side_effect=ValueError("bad")):
-            result = _caption_single_page(page=_PAGE, **_ANTHROPIC_KWARGS)
-    mock_get.return_value.messages.create.assert_not_called()
+async def test_caption_single_page_anthropic_api_error_returns_none():
+    client = _make_anthropic_mock(create_side_effect=RuntimeError("connection failed"))
+    result = await _caption_single_page(_PAGE, **_BASE_KWARGS, base_url=None, client=client)
     assert result is None
 
 
-def test_caption_single_page_api_error_returns_none():
-    with patch("app.pipeline.caption_generator._get_anthropic_client") as mock_get:
-        mock_get.return_value.messages.create.side_effect = RuntimeError("connection failed")
-        result = _caption_single_page(page=_PAGE, **_ANTHROPIC_KWARGS)
-    assert result is None
-
-
-def test_caption_single_page_anthropic_content_order():
-    """Images come before the text prompt in the Anthropic content list."""
+async def test_caption_single_page_anthropic_content_order():
     page = FilledPage(
         id="page_0",
         slots=[
@@ -181,188 +160,243 @@ def test_caption_single_page_anthropic_content_order():
             FilledSlot(id="slot_1", photo_id="photo_B"),
         ],
     )
-    photo_bytes = {"photo_A": _png_bytes(color=(255, 0, 0)), "photo_B": _png_bytes(color=(0, 255, 0))}
-    with patch("app.pipeline.caption_generator._get_anthropic_client") as mock_get:
-        mock_get.return_value.messages.create.return_value = _anthropic_response("Two photos.")
-        _caption_single_page(
-            page=page,
-            page_index=0,
-            total_pages=1,
-            photo_bytes=photo_bytes,
-            user_description="family reunion",
-            api_key="test-key",
-            model="claude-haiku-4-5-20251001",
-            base_url=None,
-        )
-    content = mock_get.return_value.messages.create.call_args.kwargs["messages"][0]["content"]
+    images = {"photo_A": make_pil_image(color=(255, 0, 0)), "photo_B": make_pil_image(color=(0, 255, 0))}
+    client = _make_anthropic_mock(create_return=_anthropic_response("Two photos."))
+    await _caption_single_page(
+        page,
+        page_index=0,
+        total_pages=1,
+        images=images,
+        user_description="family reunion",
+        api_key="k",
+        model="m",
+        base_url=None,
+        client=client,
+    )
+    content = client.messages.create.call_args.kwargs["messages"][0]["content"]
     assert content[0]["type"] == "image"
     assert content[1]["type"] == "image"
     assert content[2]["type"] == "text"
 
 
-# ---------------------------------------------------------------------------
-# _caption_single_page — OpenRouter backend (base_url set)
-# ---------------------------------------------------------------------------
-
-_OPENROUTER_KWARGS = dict(
+# OpenRouter backend
+_OR_KWARGS = dict(
     page_index=0,
     total_pages=2,
-    photo_bytes=_PHOTO_BYTES,
+    images=_IMAGES,
     user_description="summer wedding",
-    api_key="or-test-key",
+    api_key="or-key",
     model="google/gemini-flash-1.5",
-    base_url=_OPENROUTER_BASE_URL,
 )
 
 
-def test_caption_single_page_openrouter_happy_path():
-    with patch("app.pipeline.caption_generator._get_httpx_client") as mock_get:
-        mock_get.return_value.post.return_value = _openrouter_response("A sunny wedding day.")
-        result = _caption_single_page(page=_PAGE, **_OPENROUTER_KWARGS)
+async def test_caption_single_page_openrouter_happy_path():
+    client = _make_httpx_mock(post_return=_openrouter_response("A sunny wedding day."))
+    result = await _caption_single_page(
+        _PAGE, **_OR_KWARGS, base_url=_OPENROUTER_BASE_URL, client=client,
+    )
     assert result == "A sunny wedding day."
 
 
-def test_caption_single_page_openrouter_uses_image_url_format():
-    """OpenRouter messages use image_url blocks, not Anthropic's image+source format."""
-    with patch("app.pipeline.caption_generator._get_httpx_client") as mock_get:
-        mock_get.return_value.post.return_value = _openrouter_response("Caption.")
-        _caption_single_page(page=_PAGE, **_OPENROUTER_KWARGS)
-    call_kwargs = mock_get.return_value.post.call_args.kwargs
-    content = call_kwargs["json"]["messages"][0]["content"]
+async def test_caption_single_page_openrouter_uses_image_url_format():
+    client = _make_httpx_mock(post_return=_openrouter_response("Caption."))
+    await _caption_single_page(_PAGE, **_OR_KWARGS, base_url=_OPENROUTER_BASE_URL, client=client)
+    content = client.post.call_args.kwargs["json"]["messages"][0]["content"]
     image_blocks = [b for b in content if b["type"] == "image_url"]
     assert len(image_blocks) == 1
     assert image_blocks[0]["image_url"]["url"].startswith("data:image/jpeg;base64,")
 
 
-def test_caption_single_page_openrouter_posts_to_correct_url():
-    with patch("app.pipeline.caption_generator._get_httpx_client") as mock_get:
-        mock_get.return_value.post.return_value = _openrouter_response("Caption.")
-        _caption_single_page(page=_PAGE, **_OPENROUTER_KWARGS)
-    url = mock_get.return_value.post.call_args.args[0]
+async def test_caption_single_page_openrouter_posts_to_correct_url():
+    client = _make_httpx_mock(post_return=_openrouter_response("Caption."))
+    await _caption_single_page(_PAGE, **_OR_KWARGS, base_url=_OPENROUTER_BASE_URL, client=client)
+    url = client.post.call_args.args[0]
     assert url == f"{_OPENROUTER_BASE_URL}/chat/completions"
 
 
-def test_caption_single_page_openrouter_api_error_returns_none():
-    with patch("app.pipeline.caption_generator._get_httpx_client") as mock_get:
-        mock_get.return_value.post.side_effect = RuntimeError("timeout")
-        result = _caption_single_page(page=_PAGE, **_OPENROUTER_KWARGS)
+async def test_caption_single_page_openrouter_api_error_returns_none():
+    client = _make_httpx_mock(post_side_effect=RuntimeError("timeout"))
+    result = await _caption_single_page(_PAGE, **_OR_KWARGS, base_url=_OPENROUTER_BASE_URL, client=client)
     assert result is None
 
 
 # ---------------------------------------------------------------------------
-# generate_captions tests
+# generate_captions
 # ---------------------------------------------------------------------------
 
-def test_generate_captions_anthropic_happy_path():
+async def test_generate_captions_anthropic_happy_path():
     template = _make_filled_template(n_pages=2)
-    photo_bytes = {f"photo_{i}_0": _png_bytes() for i in range(2)}
-    with patch("app.pipeline.caption_generator._get_anthropic_client") as mock_get:
-        mock_get.return_value.messages.create.return_value = _anthropic_response("A caption.")
-        result = generate_captions(template, photo_bytes, "theme", api_key="key", model="claude-haiku-4-5-20251001")
+    images = {f"photo_{i}_0": make_pil_image() for i in range(2)}
+    client = _make_anthropic_mock(create_return=_anthropic_response("A caption."))
+
+    with patch("app.pipeline.caption_generator._build_anthropic_client", return_value=client):
+        result = await generate_captions(template, images, "theme", api_key="k", model="m")
+
     assert result.pages[0].caption == "A caption."
     assert result.pages[1].caption == "A caption."
 
 
-def test_generate_captions_openrouter_happy_path():
+async def test_generate_captions_openrouter_happy_path():
     template = _make_filled_template(n_pages=2)
-    photo_bytes = {f"photo_{i}_0": _png_bytes() for i in range(2)}
-    with patch("app.pipeline.caption_generator._get_httpx_client") as mock_get:
-        mock_get.return_value.post.return_value = _openrouter_response("A caption.")
-        result = generate_captions(
-            template, photo_bytes, "theme",
-            api_key="or-key", model="google/gemini-flash-1.5", base_url=_OPENROUTER_BASE_URL,
+    images = {f"photo_{i}_0": make_pil_image() for i in range(2)}
+    client = _make_httpx_mock(post_return=_openrouter_response("A caption."))
+
+    with patch("app.pipeline.caption_generator._build_httpx_client", return_value=client):
+        result = await generate_captions(
+            template, images, "theme",
+            api_key="ok", model="m", base_url=_OPENROUTER_BASE_URL,
         )
     assert result.pages[0].caption == "A caption."
     assert result.pages[1].caption == "A caption."
+    client.aclose.assert_awaited_once()
 
 
-def test_generate_captions_partial_failure():
+async def test_generate_captions_partial_failure():
     template = _make_filled_template(n_pages=2)
-    photo_bytes = {f"photo_{i}_0": _png_bytes() for i in range(2)}
-    responses = [_anthropic_response("Good caption."), Exception("API down")]
-    with patch("app.pipeline.caption_generator._get_anthropic_client") as mock_get:
-        mock_get.return_value.messages.create.side_effect = responses
-        result = generate_captions(template, photo_bytes, "theme", api_key="key", model="claude-haiku-4-5-20251001")
-    assert result.pages[0].caption == "Good caption."
-    assert result.pages[1].caption is None
+    images = {f"photo_{i}_0": make_pil_image() for i in range(2)}
+    client = _make_anthropic_mock(
+        create_side_effect=[_anthropic_response("Good caption."), RuntimeError("API down")]
+    )
+
+    with patch("app.pipeline.caption_generator._build_anthropic_client", return_value=client):
+        result = await generate_captions(template, images, "theme", api_key="k", model="m")
+
+    captions = [p.caption for p in result.pages]
+    assert "Good caption." in captions
+    assert None in captions
 
 
-def test_generate_captions_empty_pages():
+async def test_generate_captions_empty_pages():
     template = FilledTemplate(id="t1", pages=[])
-    with patch("app.pipeline.caption_generator._get_anthropic_client") as mock_get:
-        result = generate_captions(template, {}, "theme", api_key="key", model="m")
-    mock_get.assert_not_called()
+    with patch("app.pipeline.caption_generator._build_anthropic_client") as mock_build:
+        result = await generate_captions(template, {}, "theme", api_key="k", model="m")
+    mock_build.assert_not_called()
     assert result.pages == []
 
 
-def test_generate_captions_returns_new_object():
+async def test_generate_captions_returns_new_object():
     template = _make_filled_template(n_pages=1)
-    photo_bytes = {"photo_0_0": _png_bytes()}
-    with patch("app.pipeline.caption_generator._get_anthropic_client") as mock_get:
-        mock_get.return_value.messages.create.return_value = _anthropic_response("Caption.")
-        result = generate_captions(template, photo_bytes, "theme", api_key="key", model="m")
+    images = {"photo_0_0": make_pil_image()}
+    client = _make_anthropic_mock(create_return=_anthropic_response("Caption."))
+
+    with patch("app.pipeline.caption_generator._build_anthropic_client", return_value=client):
+        result = await generate_captions(template, images, "theme", api_key="k", model="m")
+
     assert result is not template
     assert template.pages[0].caption is None  # original not mutated
 
 
+async def test_generate_captions_runs_pages_in_parallel():
+    """Win 1: per-page calls run concurrently rather than sequentially."""
+    n_pages = 4
+    template = _make_filled_template(n_pages=n_pages)
+    images = {f"photo_{i}_0": make_pil_image() for i in range(n_pages)}
+
+    delay = 0.1
+
+    async def slow_create(*args, **kwargs):
+        await asyncio.sleep(delay)
+        return _anthropic_response("Caption")
+
+    client = MagicMock()
+    client.messages.create = AsyncMock(side_effect=slow_create)
+
+    with patch("app.pipeline.caption_generator._build_anthropic_client", return_value=client):
+        start = time.monotonic()
+        result = await generate_captions(template, images, "theme", api_key="k", model="m")
+        elapsed = time.monotonic() - start
+
+    # 4 parallel calls @ delay each must complete near `delay`, far below n_pages × delay.
+    assert elapsed < delay * n_pages * 0.6, f"Expected parallel ≈{delay}s, got {elapsed}s"
+    assert all(p.caption == "Caption" for p in result.pages)
+
+
+async def test_generate_captions_respects_concurrency_limit():
+    """Semaphore bounds the number of in-flight LLM calls."""
+    n_pages = 10
+    limit = 3
+    template = _make_filled_template(n_pages=n_pages)
+    images = {f"photo_{i}_0": make_pil_image() for i in range(n_pages)}
+
+    in_flight = 0
+    peak = 0
+
+    async def tracked_create(*args, **kwargs):
+        nonlocal in_flight, peak
+        in_flight += 1
+        peak = max(peak, in_flight)
+        await asyncio.sleep(0.02)
+        in_flight -= 1
+        return _anthropic_response("Caption")
+
+    client = MagicMock()
+    client.messages.create = AsyncMock(side_effect=tracked_create)
+
+    with patch("app.pipeline.caption_generator._build_anthropic_client", return_value=client):
+        await generate_captions(
+            template, images, "theme", api_key="k", model="m", max_concurrent=limit,
+        )
+
+    assert peak <= limit, f"Concurrency exceeded limit: peaked at {peak}"
+
+
 # ---------------------------------------------------------------------------
-# generate_cover_caption tests
+# generate_cover_caption
 # ---------------------------------------------------------------------------
 
 _RANKED = ["photo_0", "photo_1", "photo_2", "photo_3", "photo_4", "photo_5"]
-_COVER_PHOTO_BYTES = {pid: _png_bytes() for pid in _RANKED}
+_COVER_IMAGES = {pid: make_pil_image() for pid in _RANKED}
 
 
-def test_cover_caption_anthropic_happy_path():
-    with patch("app.pipeline.caption_generator._get_anthropic_client") as mock_get:
-        mock_get.return_value.messages.create.return_value = _anthropic_response("  Summer Love  ")
-        result = generate_cover_caption(
-            _RANKED, _COVER_PHOTO_BYTES, "summer wedding", api_key="key", model="m"
+async def test_cover_caption_anthropic_happy_path():
+    client = _make_anthropic_mock(create_return=_anthropic_response("  Summer Love  "))
+    with patch("app.pipeline.caption_generator._build_anthropic_client", return_value=client):
+        result = await generate_cover_caption(
+            _RANKED, _COVER_IMAGES, "summer wedding", api_key="k", model="m",
         )
     assert result == "Summer Love"
 
 
-def test_cover_caption_openrouter_happy_path():
-    with patch("app.pipeline.caption_generator._get_httpx_client") as mock_get:
-        mock_get.return_value.post.return_value = _openrouter_response("Summer Love")
-        result = generate_cover_caption(
-            _RANKED, _COVER_PHOTO_BYTES, "summer wedding",
-            api_key="or-key", model="google/gemini-flash-1.5", base_url=_OPENROUTER_BASE_URL,
+async def test_cover_caption_openrouter_happy_path():
+    client = _make_httpx_mock(post_return=_openrouter_response("Summer Love"))
+    with patch("app.pipeline.caption_generator._build_httpx_client", return_value=client):
+        result = await generate_cover_caption(
+            _RANKED, _COVER_IMAGES, "summer wedding",
+            api_key="ok", model="m", base_url=_OPENROUTER_BASE_URL,
         )
     assert result == "Summer Love"
+    client.aclose.assert_awaited_once()
 
 
-def test_cover_caption_limits_to_max_photos():
-    """Only first max_photos images should be sent."""
-    with patch("app.pipeline.caption_generator._get_anthropic_client") as mock_get:
-        mock_get.return_value.messages.create.return_value = _anthropic_response("Title.")
-        generate_cover_caption(
-            _RANKED, _COVER_PHOTO_BYTES, "theme",
-            api_key="key", model="m", max_photos=3,
+async def test_cover_caption_limits_to_max_photos():
+    client = _make_anthropic_mock(create_return=_anthropic_response("Title."))
+    with patch("app.pipeline.caption_generator._build_anthropic_client", return_value=client):
+        await generate_cover_caption(
+            _RANKED, _COVER_IMAGES, "theme", api_key="k", model="m", max_photos=3,
         )
-    content = mock_get.return_value.messages.create.call_args.kwargs["messages"][0]["content"]
+    content = client.messages.create.call_args.kwargs["messages"][0]["content"]
     image_blocks = [b for b in content if b["type"] == "image"]
     assert len(image_blocks) == 3
 
 
-def test_cover_caption_empty_ranked_returns_none():
-    with patch("app.pipeline.caption_generator._get_anthropic_client") as mock_get:
-        result = generate_cover_caption([], {}, "theme", api_key="key", model="m")
-    mock_get.assert_not_called()
+async def test_cover_caption_empty_ranked_returns_none():
+    with patch("app.pipeline.caption_generator._build_anthropic_client") as mock_build:
+        result = await generate_cover_caption([], {}, "theme", api_key="k", model="m")
+    mock_build.assert_not_called()
     assert result is None
 
 
-def test_cover_caption_all_photos_missing_returns_none():
-    with patch("app.pipeline.caption_generator._get_anthropic_client") as mock_get:
-        result = generate_cover_caption(_RANKED, {}, "theme", api_key="key", model="m")
-    mock_get.return_value.messages.create.assert_not_called()
+async def test_cover_caption_all_photos_missing_returns_none():
+    with patch("app.pipeline.caption_generator._build_anthropic_client") as mock_build:
+        result = await generate_cover_caption(_RANKED, {}, "theme", api_key="k", model="m")
+    mock_build.assert_not_called()
     assert result is None
 
 
-def test_cover_caption_api_failure_returns_none():
-    with patch("app.pipeline.caption_generator._get_anthropic_client") as mock_get:
-        mock_get.return_value.messages.create.side_effect = RuntimeError("API down")
-        result = generate_cover_caption(
-            _RANKED, _COVER_PHOTO_BYTES, "theme", api_key="key", model="m"
+async def test_cover_caption_api_failure_returns_none():
+    client = _make_anthropic_mock(create_side_effect=RuntimeError("API down"))
+    with patch("app.pipeline.caption_generator._build_anthropic_client", return_value=client):
+        result = await generate_cover_caption(
+            _RANKED, _COVER_IMAGES, "theme", api_key="k", model="m",
         )
     assert result is None

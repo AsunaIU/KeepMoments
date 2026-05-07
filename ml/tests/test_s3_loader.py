@@ -1,4 +1,4 @@
-from concurrent.futures import TimeoutError as FuturesTimeoutError
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from unittest.mock import MagicMock, patch
 
 from app.pipeline.s3_loader import download_photos
@@ -140,3 +140,40 @@ def test_custom_timeout_passed_to_future():
 
     assert len(captured_futures) == 1
     captured_futures[0].result.assert_called_once_with(timeout=5.0)
+
+
+# ---------------------------------------------------------------------------
+# Shared executor (Win 5) — caller may supply a long-lived ThreadPoolExecutor
+# ---------------------------------------------------------------------------
+
+def test_uses_provided_executor_without_constructing_new_one():
+    """When a caller supplies an executor, no new ThreadPoolExecutor is built."""
+    client = _make_s3_client({"p1": b"data"})
+    shared = ThreadPoolExecutor(max_workers=2)
+    try:
+        with patch("app.pipeline.s3_loader.ThreadPoolExecutor") as mock_ctor:
+            result = download_photos(["p1"], "bucket", client, executor=shared)
+        assert result == {"p1": b"data"}
+        mock_ctor.assert_not_called()
+    finally:
+        shared.shutdown(wait=True)
+
+
+def test_provided_executor_is_not_shutdown():
+    """Caller-owned executor must outlive the call (no implicit shutdown)."""
+    client = _make_s3_client({"p1": b"data1", "p2": b"data2"})
+    shared = ThreadPoolExecutor(max_workers=2)
+    try:
+        download_photos(["p1", "p2"], "bucket", client, executor=shared)
+        # Submitting again should still work — shared pool wasn't shutdown
+        future = shared.submit(lambda: 42)
+        assert future.result(timeout=1.0) == 42
+    finally:
+        shared.shutdown(wait=True)
+
+
+def test_no_executor_falls_back_to_internal_pool():
+    """Backwards compatibility: omitting executor still works."""
+    client = _make_s3_client({"p1": b"x"})
+    result = download_photos(["p1"], "bucket", client)
+    assert result == {"p1": b"x"}

@@ -1,4 +1,3 @@
-import io
 import logging
 
 import cv2
@@ -7,14 +6,34 @@ from PIL import Image
 
 logger = logging.getLogger(__name__)
 
+_QUALITY_MAX_DIM = 1024  # downsample longer side before pixel-level analysis
 
-def score_quality(photo_bytes: dict[str, bytes]) -> dict[str, float]:
+
+def _quality_image(img: Image.Image) -> Image.Image:
+    """Return a copy of ``img`` whose longer side is at most ``_QUALITY_MAX_DIM``.
+
+    Full-resolution Laplacian on a 24MP photo is wasteful — the variance metric
+    is essentially scale-invariant for blur detection. We never mutate the input.
+    """
+    w, h = img.size
+    if max(w, h) <= _QUALITY_MAX_DIM:
+        return img
+    work = img.copy()
+    work.thumbnail((_QUALITY_MAX_DIM, _QUALITY_MAX_DIM))
+    return work
+
+
+def score_quality(images: dict[str, Image.Image]) -> dict[str, float]:
+    """Score each image on sharpness (Laplacian variance) and exposure (brightness).
+
+    Inputs are already-decoded PIL.Image objects (see image_cache.decode_images).
+    """
     raw_scores: dict[str, dict[str, float]] = {}
 
-    for pid, data in photo_bytes.items():
+    for pid, img in images.items():
         try:
-            img = Image.open(io.BytesIO(data)).convert("RGB")
-            arr = np.array(img)
+            small = _quality_image(img)
+            arr = np.array(small)
             gray = cv2.cvtColor(arr, cv2.COLOR_RGB2GRAY)
 
             sharpness = float(cv2.Laplacian(gray, cv2.CV_64F).var())
@@ -26,15 +45,15 @@ def score_quality(photo_bytes: dict[str, bytes]) -> dict[str, float]:
             logger.warning("Failed to score quality for photo %s: %s", pid, exc)
             raw_scores[pid] = {"sharpness": 0.0, "exposure": 0.0}
 
-    # Min-max normalize sharpness across all photos
+    if not raw_scores:
+        return {}
+
     sharpness_values = [v["sharpness"] for v in raw_scores.values()]
     s_min = min(sharpness_values)
     s_max = max(sharpness_values)
     s_range = s_max - s_min if s_max > s_min else 1.0
 
-    scores: dict[str, float] = {}
-    for pid, metrics in raw_scores.items():
-        norm_sharpness = (metrics["sharpness"] - s_min) / s_range
-        scores[pid] = 0.6 * norm_sharpness + 0.4 * metrics["exposure"]
-
-    return scores
+    return {
+        pid: 0.6 * (m["sharpness"] - s_min) / s_range + 0.4 * m["exposure"]
+        for pid, m in raw_scores.items()
+    }

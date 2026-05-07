@@ -1,5 +1,6 @@
 import logging
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+from concurrent.futures import Executor, ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
+from contextlib import nullcontext
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +12,13 @@ def download_photos(
     bucket: str,
     s3_client,
     timeout: float = _DEFAULT_TIMEOUT,
+    executor: Executor | None = None,
 ) -> dict[str, bytes]:
+    """Download photos from S3 in parallel.
+
+    If ``executor`` is supplied (e.g. the app-wide pool), it is reused and not
+    shut down. Otherwise a temporary pool is created for this call.
+    """
     def fetch(photo_id: str) -> tuple[str, bytes | None]:
         try:
             obj = s3_client.get_object(Bucket=bucket, Key=photo_id)
@@ -21,7 +28,12 @@ def download_photos(
             return photo_id, None
 
     results: dict[str, bytes] = {}
-    with ThreadPoolExecutor() as pool:
+    if executor is not None:
+        pool_ctx = nullcontext(executor)
+    else:
+        pool_ctx = ThreadPoolExecutor()
+
+    with pool_ctx as pool:
         futures = {pool.submit(fetch, pid): pid for pid in photo_ids}
         for future, pid in futures.items():
             try:

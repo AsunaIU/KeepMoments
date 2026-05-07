@@ -54,6 +54,28 @@ def make_checkerboard_image_bytes(width: int = 64, height: int = 64) -> bytes:
     return buf.getvalue()
 
 
+def make_pil_image(color: tuple = (128, 128, 128), width: int = 64, height: int = 64) -> Image.Image:
+    """RGB PIL.Image fixture (Win 2: pipeline modules now accept decoded images)."""
+    return Image.new("RGB", (width, height), color)
+
+
+def make_portrait_image(width: int = 40, height: int = 80) -> Image.Image:
+    return make_pil_image(width=width, height=height)
+
+
+def make_landscape_image(width: int = 80, height: int = 40) -> Image.Image:
+    return make_pil_image(width=width, height=height)
+
+
+def make_checkerboard_image(width: int = 64, height: int = 64) -> Image.Image:
+    arr = np.zeros((height, width, 3), dtype=np.uint8)
+    for y in range(height):
+        for x in range(width):
+            if (x + y) % 2 == 0:
+                arr[y, x] = [255, 255, 255]
+    return Image.fromarray(arr)
+
+
 # ---------------------------------------------------------------------------
 # Schema helpers
 # ---------------------------------------------------------------------------

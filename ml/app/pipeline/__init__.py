@@ -1,50 +1,121 @@
 import asyncio
 import logging
+from dataclasses import dataclass
 from functools import partial
+from typing import Any
 
+from PIL import Image
 from fastapi import HTTPException
 
 from app.config import Settings
 from app.schemas import FilledTemplate, ProcessRequest
-from app.pipeline.s3_loader import download_photos
-from app.pipeline.embeddings import extract_embeddings
+from app.pipeline.caption_generator import _OPENROUTER_BASE_URL, generate_captions
 from app.pipeline.clustering import cluster_photos
-from app.pipeline.quality import score_quality
-from app.pipeline.selector import select_photos
-from app.pipeline.reranker import rerank_by_text
-from app.pipeline.orientation import detect_orientation
-from app.pipeline.template_filler import count_template_slots, fill_template
-from app.pipeline.caption_generator import generate_captions, _OPENROUTER_BASE_URL
 from app.pipeline.cover_filler import fill_covers
+from app.pipeline.embeddings import extract_embeddings
+from app.pipeline.image_cache import decode_images
+from app.pipeline.orientation import detect_orientation
+from app.pipeline.quality import score_quality
+from app.pipeline.reranker import rerank_by_text
+from app.pipeline.s3_loader import download_photos
+from app.pipeline.selector import select_photos
+from app.pipeline.template_filler import count_template_slots, fill_template
 
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class _PipelineState:
+    """Intermediate state produced by the sync part of the pipeline (steps 1-9)."""
+    images: dict[str, Image.Image]
+    ranked: list[str]
+    filled: FilledTemplate
+
+
+def _resolve_caption_backend(settings: Settings) -> tuple[str | None, str | None, str | None]:
+    """Pick (api_key, model, base_url) for caption/cover LLM calls. None if disabled."""
+    if settings.OPENROUTER_API_KEY:
+        return settings.OPENROUTER_API_KEY, settings.OPENROUTER_MODEL, _OPENROUTER_BASE_URL
+    if settings.ANTHROPIC_API_KEY:
+        return settings.ANTHROPIC_API_KEY, settings.ANTHROPIC_MODEL, None
+    return None, None, None
+
+
 async def run_pipeline(
-    request: ProcessRequest, settings: Settings, s3_client, clip_model, clip_preprocess
+    request: ProcessRequest,
+    settings: Settings,
+    s3_client,
+    clip_model,
+    clip_preprocess,
+    download_executor=None,
 ) -> FilledTemplate:
     loop = asyncio.get_event_loop()
-    fn = partial(_run_pipeline_sync, request, settings, s3_client, clip_model, clip_preprocess)
-    return await loop.run_in_executor(None, fn)
+    fn = partial(
+        _run_pipeline_sync,
+        request, settings, s3_client, clip_model, clip_preprocess,
+        download_executor,
+    )
+    state = await loop.run_in_executor(None, fn)
+
+    api_key, model, base_url = _resolve_caption_backend(settings)
+    filled = state.filled
+
+    if api_key:
+        filled = await generate_captions(
+            filled_template=filled,
+            images=state.images,
+            user_description=request.user_description,
+            api_key=api_key,
+            model=model,
+            base_url=base_url,
+        )
+
+    if request.template.front_cover is not None or request.template.back_cover is not None:
+        filled = await fill_covers(
+            filled_template=filled,
+            front_config=request.template.front_cover,
+            back_config=request.template.back_cover,
+            ranked_photos=state.ranked,
+            images=state.images,
+            user_description=request.user_description,
+            api_key=api_key,
+            model=model,
+            base_url=base_url,
+        )
+
+    return filled
 
 
 def _run_pipeline_sync(
-    request: ProcessRequest, settings: Settings, s3_client, clip_model, clip_preprocess
-) -> FilledTemplate:
+    request: ProcessRequest,
+    settings: Settings,
+    s3_client,
+    clip_model,
+    clip_preprocess,
+    download_executor=None,
+) -> _PipelineState:
     # 1. Download photos from S3
-    photo_bytes = download_photos(request.photo_ids, settings.S3_BUCKET_NAME, s3_client)
+    photo_bytes = download_photos(
+        request.photo_ids, settings.S3_BUCKET_NAME, s3_client,
+        executor=download_executor,
+    )
 
-    # 1b. Detect photo orientations
-    orientations = detect_orientation(photo_bytes)
+    # 1a. Decode each photo to PIL.Image once (Win 2 — single-pass decode)
+    images = decode_images(photo_bytes)
+    # Release encoded bytes — subsequent steps work on decoded images.
+    photo_bytes.clear()
 
-    if not photo_bytes:
+    if not images:
         raise HTTPException(status_code=503, detail="No photos could be downloaded from S3")
 
-    if len(photo_bytes) < request.min_photos:
+    if len(images) < request.min_photos:
         raise HTTPException(
             status_code=422,
-            detail=f"Only {len(photo_bytes)} photos available, but min_photos={request.min_photos}",
+            detail=f"Only {len(images)} photos available, but min_photos={request.min_photos}",
         )
+
+    # 1b. Detect photo orientations
+    orientations = detect_orientation(images)
 
     # 2. Count template slots
     n_slots = count_template_slots(request.template)
@@ -53,19 +124,19 @@ def _run_pipeline_sync(
 
     # 3. Determine how many photos to select
     n_select = max(request.min_photos, min(n_slots, request.max_photos))
-    n_select = min(n_select, len(photo_bytes))
+    n_select = min(n_select, len(images))
 
-    # 4. Extract CLIP embeddings
-    embeddings = extract_embeddings(photo_bytes, clip_model, clip_preprocess)
+    # 4. Extract CLIP embeddings (chunked internally)
+    embeddings = extract_embeddings(images, clip_model, clip_preprocess)
 
     # 5. Cluster
     n_clusters = min(len(embeddings), n_select)
     clusters = cluster_photos(embeddings, n_clusters, settings.KMEANS_RANDOM_STATE)
 
     # 6. Score quality
-    quality_scores = score_quality(photo_bytes)
+    quality_scores = score_quality(images)
 
-    # 7. Select best n_select photos via round-robin across clusters
+    # 7. Round-robin select across clusters
     selected = select_photos(clusters, quality_scores, n_select)
 
     # 8. Re-rank by CLIP text similarity with user description
@@ -74,50 +145,4 @@ def _run_pipeline_sync(
     # 9. Fill template slots in document order
     filled = fill_template(request.template, ranked, orientations=orientations)
 
-    # 10. Generate per-page captions (skipped if no caption API key is configured)
-    if settings.OPENROUTER_API_KEY:
-        filled = generate_captions(
-            filled_template=filled,
-            photo_bytes=photo_bytes,
-            user_description=request.user_description,
-            api_key=settings.OPENROUTER_API_KEY,
-            model=settings.OPENROUTER_MODEL,
-            base_url=_OPENROUTER_BASE_URL,
-        )
-    elif settings.ANTHROPIC_API_KEY:
-        filled = generate_captions(
-            filled_template=filled,
-            photo_bytes=photo_bytes,
-            user_description=request.user_description,
-            api_key=settings.ANTHROPIC_API_KEY,
-            model=settings.ANTHROPIC_MODEL,
-        )
-
-    # 11. Fill covers (optional, skipped if template has no covers)
-    if request.template.front_cover is not None or request.template.back_cover is not None:
-        if settings.OPENROUTER_API_KEY:
-            caption_api_key = settings.OPENROUTER_API_KEY
-            caption_model = settings.OPENROUTER_MODEL
-            caption_base_url = _OPENROUTER_BASE_URL
-        elif settings.ANTHROPIC_API_KEY:
-            caption_api_key = settings.ANTHROPIC_API_KEY
-            caption_model = settings.ANTHROPIC_MODEL
-            caption_base_url = None
-        else:
-            caption_api_key = None
-            caption_model = None
-            caption_base_url = None
-
-        filled = fill_covers(
-            filled_template=filled,
-            front_config=request.template.front_cover,
-            back_config=request.template.back_cover,
-            ranked_photos=ranked,
-            photo_bytes=photo_bytes,
-            user_description=request.user_description,
-            api_key=caption_api_key,
-            model=caption_model,
-            base_url=caption_base_url,
-        )
-
-    return filled
+    return _PipelineState(images=images, ranked=ranked, filled=filled)
