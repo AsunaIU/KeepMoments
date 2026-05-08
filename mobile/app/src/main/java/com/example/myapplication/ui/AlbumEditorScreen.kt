@@ -79,6 +79,9 @@ fun AlbumEditorScreen(
     onPageChange: (Int) -> Unit,
     onSlotClick: (AlbumSlot) -> Unit,
     onEmptySlotClick: (AlbumSlot) -> Unit,
+    onCaptionClick: (AlbumSlot) -> Unit,
+    onCaptionChange: (String, String) -> Unit,
+    onCaptionDeleteClick: (String) -> Unit,
     onDismissSlotMenu: () -> Unit,
     onReplaceSlotClick: () -> Unit,
     onDeleteSlotClick: () -> Unit,
@@ -167,7 +170,7 @@ fun AlbumEditorScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding),
-                userScrollEnabled = uiState.selectedSlotId == null && uiState.selectedStickerId == null
+                userScrollEnabled = uiState.selectedSlotId == null && uiState.selectedStickerId == null && uiState.selectedCaptionSlotId == null
             ) { index ->
                 val page = if (index == uiState.currentPageIndex) uiState.editablePage else pages[index]
                 EditorPage(
@@ -175,11 +178,16 @@ fun AlbumEditorScreen(
                     photosById = photosById,
                     selectedSlotId = uiState.selectedSlotId,
                     selectedStickerId = uiState.selectedStickerId,
+                    selectedCaptionSlotId = uiState.selectedCaptionSlotId,
                     onSlotClick = onSlotClick,
                     onEmptySlotClick = onEmptySlotClick,
+                    onCaptionClick = onCaptionClick,
+                    onCaptionChange = onCaptionChange,
+                    onCaptionDeleteClick = onCaptionDeleteClick,
                     onSlotTransform = onSlotTransform,
                     onStickerSelected = onStickerSelected,
-                    onStickerTransform = onStickerTransform
+                    onStickerTransform = onStickerTransform,
+                    onDeleteStickerClick = onDeleteStickerClick
                 )
             }
         }
@@ -251,11 +259,16 @@ private fun EditorPage(
     photosById: Map<String, SelectedPhoto>,
     selectedSlotId: String?,
     selectedStickerId: String?,
+    selectedCaptionSlotId: String?,
     onSlotClick: (AlbumSlot) -> Unit,
     onEmptySlotClick: (AlbumSlot) -> Unit,
+    onCaptionClick: (AlbumSlot) -> Unit,
+    onCaptionChange: (String, String) -> Unit,
+    onCaptionDeleteClick: (String) -> Unit,
     onSlotTransform: (String, Float, Float, Float) -> Unit,
     onStickerSelected: (AlbumSticker) -> Unit,
-    onStickerTransform: (String, Float, Float, Float) -> Unit
+    onStickerTransform: (String, Float, Float, Float) -> Unit,
+    onDeleteStickerClick: () -> Unit
 ) {
     Box(
         modifier = Modifier
@@ -278,9 +291,14 @@ private fun EditorPage(
                         photosById = photosById,
                         selectedSlotId = selectedSlotId,
                         selectedStickerId = selectedStickerId,
+                        selectedCaptionSlotId = selectedCaptionSlotId,
                         onSlotClick = onSlotClick,
                         onEmptySlotClick = onEmptySlotClick,
+                        onCaptionClick = onCaptionClick,
+                        onCaptionChange = { slot, value -> onCaptionChange(slot.id, value) },
+                        onCaptionDelete = { onCaptionDeleteClick(it.id) },
                         onStickerClick = onStickerSelected,
+                        onStickerDelete = { onDeleteStickerClick() },
                         modifier = Modifier.fillMaxSize(),
                         slotModifier = { slot ->
                             if (slot.id == selectedSlotId) {
@@ -381,9 +399,7 @@ private fun EditorBottomPanel(
                 )
                 EditorTab.Layout -> LayoutStrip(uiState = uiState, onLayoutClick = onLayoutClick)
                 EditorTab.Sticker -> StickerStrip(
-                    onStickerClick = onStickerClick,
-                    selectedStickerId = uiState.selectedStickerId,
-                    onDeleteStickerClick = onDeleteStickerClick
+                    onStickerClick = onStickerClick
                 )
             }
         }
@@ -488,9 +504,7 @@ private fun LayoutThumbnail(
 
 @Composable
 private fun StickerStrip(
-    selectedStickerId: String?,
-    onStickerClick: (String) -> Unit,
-    onDeleteStickerClick: () -> Unit
+    onStickerClick: (String) -> Unit
 ) {
     val stickers = listOf("❤️", "⭐", "🌸", "🎂", "✈️", "📍", "✨", "😊")
     Row(
@@ -515,11 +529,6 @@ private fun StickerStrip(
                 ) {
                     Text(sticker, style = MaterialTheme.typography.headlineSmall)
                 }
-            }
-        }
-        if (selectedStickerId != null) {
-            IconButton(onClick = onDeleteStickerClick) {
-                Icon(Icons.Default.Close, contentDescription = "Удалить стикер", tint = Color.White)
             }
         }
     }

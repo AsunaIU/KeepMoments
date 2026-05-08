@@ -123,12 +123,42 @@ class AlbumEditorViewModel(
     }
 
     fun selectSlot(slot: AlbumSlot) {
-        _uiState.update { it.copy(selectedSlotId = slot.id, selectedStickerId = null, slotMenu = slot) }
+        _uiState.update { it.copy(selectedSlotId = slot.id, selectedStickerId = null, selectedCaptionSlotId = null, slotMenu = slot) }
     }
 
     fun selectEmptySlot(slot: AlbumSlot) {
-        _uiState.update { it.copy(selectedSlotId = slot.id, selectedStickerId = null, slotMenu = null, activeTab = EditorTab.Gallery) }
+        _uiState.update { it.copy(selectedSlotId = slot.id, selectedStickerId = null, selectedCaptionSlotId = null, slotMenu = null, activeTab = EditorTab.Gallery) }
         emitMessage("Выберите фото из галереи")
+    }
+
+    fun selectCaption(slot: AlbumSlot) {
+        _uiState.update {
+            it.copy(
+                selectedCaptionSlotId = slot.id,
+                selectedSlotId = null,
+                selectedStickerId = null,
+                slotMenu = null
+            )
+        }
+    }
+
+    fun updateCaptionText(slotId: String, caption: String) {
+        updateEditablePage { page ->
+            page.copy(slots = page.slots.map { slot ->
+                if (slot.id == slotId) slot.copy(caption = caption.take(CAPTION_LIMIT)) else slot
+            })
+        }
+        _uiState.update { it.copy(selectedCaptionSlotId = slotId) }
+    }
+
+    fun deleteCaption(slotId: String? = _uiState.value.selectedCaptionSlotId) {
+        val id = slotId ?: return
+        updateEditablePage { page ->
+            page.copy(slots = page.slots.map { slot ->
+                if (slot.id == id) slot.copy(caption = "") else slot
+            })
+        }
+        _uiState.update { it.copy(selectedCaptionSlotId = null) }
     }
 
     fun dismissSlotMenu() {
@@ -264,7 +294,7 @@ class AlbumEditorViewModel(
     }
 
     fun selectSticker(sticker: AlbumSticker) {
-        _uiState.update { it.copy(selectedStickerId = sticker.id, selectedSlotId = null, slotMenu = null) }
+        _uiState.update { it.copy(selectedStickerId = sticker.id, selectedSlotId = null, selectedCaptionSlotId = null, slotMenu = null) }
     }
 
     fun updateSticker(stickerId: String, dx: Float, dy: Float, scaleChange: Float) {
@@ -317,6 +347,7 @@ class AlbumEditorViewModel(
                 hasUnsavedChanges = false,
                 selectedSlotId = null,
                 selectedStickerId = null,
+                selectedCaptionSlotId = null,
                 slotMenu = null,
                 savePrompt = null
             )
@@ -366,6 +397,8 @@ class AlbumEditorViewModel(
     }
 }
 
+private const val CAPTION_LIMIT = 120
+
 data class AlbumEditorUiState(
     val album: EditableAlbum? = null,
     val currentPageIndex: Int = 0,
@@ -374,6 +407,7 @@ data class AlbumEditorUiState(
     val activeTab: EditorTab = EditorTab.Gallery,
     val selectedSlotId: String? = null,
     val selectedStickerId: String? = null,
+    val selectedCaptionSlotId: String? = null,
     val hasUnsavedChanges: Boolean = false,
     val savePrompt: SavePrompt? = null,
     val orientationPromptLayoutId: String? = null,

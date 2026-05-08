@@ -50,6 +50,8 @@ class AlbumRepository(
     suspend fun createInitialAlbumFromRenderedBook(book: RenderedBook) {
         val draft = draftDao.getDraft(book.draftId) ?: return
         val photosByUri = draft.photos.associateBy { it.uriString }
+        val storyPrompt = draft.draft.storyPrompt.orEmpty()
+        val generateCaptions = draft.draft.generateCaptions
         val now = System.currentTimeMillis()
         val pageEntities = mutableListOf<AlbumPageEntity>()
         val slotEntities = mutableListOf<AlbumSlotEntity>()
@@ -73,7 +75,7 @@ class AlbumRepository(
                     pageId = pageId,
                     slotKey = slotSpec.key,
                     photoId = firstPhoto?.id,
-                    caption = page.slots.firstOrNull()?.caption.orEmpty(),
+                    caption = if (generateCaptions) captionFor(index = index, storyPrompt = storyPrompt) else "",
                     cropScale = 1f,
                     cropOffsetX = 0f,
                     cropOffsetY = 0f
@@ -94,6 +96,8 @@ class AlbumRepository(
         val draft = draftDao.getDraft(draftId) ?: return false
         val photos = draft.photos.sortedBy { it.position }.filter { it.isValid }
         if (photos.isEmpty()) return false
+        val storyPrompt = draft.draft.storyPrompt.orEmpty()
+        val generateCaptions = draft.draft.generateCaptions
 
         val now = System.currentTimeMillis()
         val pageEntities = mutableListOf<AlbumPageEntity>()
@@ -116,7 +120,7 @@ class AlbumRepository(
                     pageId = pageId,
                     slotKey = slotSpec.key,
                     photoId = photo.id,
-                    caption = "",
+                    caption = if (generateCaptions) captionFor(index = index, storyPrompt = storyPrompt) else "",
                     cropScale = 1f,
                     cropOffsetX = 0f,
                     cropOffsetY = 0f
@@ -235,6 +239,8 @@ class AlbumRepository(
             ownerType = DraftOwnerType.valueOf(draft.ownerType),
             ownerUserId = draft.ownerUserId,
             title = draft.title,
+            storyPrompt = draft.storyPrompt,
+            generateCaptions = draft.generateCaptions,
             createdAt = draft.createdAt,
             updatedAt = draft.updatedAt,
             selectedPhotos = photos.sortedBy { it.position }.map { it.toSelectedPhoto() }
@@ -253,4 +259,21 @@ class AlbumRepository(
         validationMessage = validationMessage,
         position = position
     )
+
+    private fun captionFor(index: Int, storyPrompt: String): String {
+        if (index == 0 && storyPrompt.isNotBlank()) {
+            return storyPrompt.trim().take(80)
+        }
+        return defaultCaptions[index % defaultCaptions.size]
+    }
+
+    private companion object {
+        val defaultCaptions = listOf(
+            "Первый день путешествия",
+            "Момент, который хочется сохранить",
+            "Прекрасный день с близкими людьми",
+            "Прогулка в солнечный день",
+            "Новая страница нашей истории"
+        )
+    }
 }

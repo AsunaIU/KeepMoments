@@ -8,10 +8,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -22,6 +26,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -41,9 +46,14 @@ fun AlbumPageRenderer(
     modifier: Modifier = Modifier,
     selectedSlotId: String? = null,
     selectedStickerId: String? = null,
+    selectedCaptionSlotId: String? = null,
     onSlotClick: ((AlbumSlot) -> Unit)? = null,
     onEmptySlotClick: ((AlbumSlot) -> Unit)? = null,
+    onCaptionClick: ((AlbumSlot) -> Unit)? = null,
+    onCaptionChange: ((AlbumSlot, String) -> Unit)? = null,
+    onCaptionDelete: ((AlbumSlot) -> Unit)? = null,
     onStickerClick: ((AlbumSticker) -> Unit)? = null,
+    onStickerDelete: ((AlbumSticker) -> Unit)? = null,
     slotModifier: (AlbumSlot) -> Modifier = { Modifier },
     stickerModifier: (AlbumSticker) -> Modifier = { Modifier }
 ) {
@@ -65,6 +75,7 @@ fun AlbumPageRenderer(
                     slot = slot,
                     photo = photo,
                     selected = selectedSlotId == slot.id,
+                    captionSelected = selectedCaptionSlotId == slot.id,
                     modifier = Modifier
                         .offset { IntOffset(x.roundToPx(), y.roundToPx()) }
                         .size(slotWidth, slotHeight)
@@ -75,14 +86,16 @@ fun AlbumPageRenderer(
                         } else {
                             onSlotClick?.invoke(slot)
                         }
-                    }
+                    },
+                    onCaptionClick = { onCaptionClick?.invoke(slot) },
+                    onCaptionChange = { value -> onCaptionChange?.invoke(slot, value) },
+                    onCaptionDelete = { onCaptionDelete?.invoke(slot) }
                 )
             }
 
             page.stickers.sortedBy { it.zIndex }.forEach { sticker ->
-                Text(
-                    text = sticker.sticker,
-                    fontSize = (44f * sticker.scale.coerceIn(0.4f, 4f)).sp,
+                val selected = selectedStickerId == sticker.id
+                Box(
                     modifier = Modifier
                         .offset {
                             IntOffset(
@@ -93,14 +106,28 @@ fun AlbumPageRenderer(
                         .graphicsLayer(rotationZ = sticker.rotation)
                         .then(stickerModifier(sticker))
                         .then(
-                            if (selectedStickerId == sticker.id) {
-                                Modifier.border(1.5.dp, Color.White, RoundedCornerShape(8.dp))
+                            if (selected) {
+                                Modifier.border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
                             } else {
                                 Modifier
                             }
                         )
                         .clickable { onStickerClick?.invoke(sticker) }
-                )
+                        .padding(4.dp)
+                ) {
+                    Text(
+                        text = sticker.sticker,
+                        fontSize = (44f * sticker.scale.coerceIn(0.4f, 4f)).sp
+                    )
+                    if (selected) {
+                        CloseButton(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .offset(x = 10.dp, y = (-10).dp),
+                            onClick = { onStickerDelete?.invoke(sticker) }
+                        )
+                    }
+                }
             }
         }
     }
@@ -111,8 +138,12 @@ private fun AlbumSlotContent(
     slot: AlbumSlot,
     photo: SelectedPhoto?,
     selected: Boolean,
+    captionSelected: Boolean,
     modifier: Modifier,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onCaptionClick: () -> Unit,
+    onCaptionChange: (String) -> Unit,
+    onCaptionDelete: () -> Unit
 ) {
     Box(
         modifier = modifier
@@ -145,16 +176,69 @@ private fun AlbumSlotContent(
                 contentScale = ContentScale.Crop
             )
             if (slot.caption.isNotBlank()) {
-                Text(
-                    text = slot.caption,
-                    color = Color.Black,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
+                Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
+                        .then(
+                            if (captionSelected) {
+                                Modifier.border(1.dp, Color.White.copy(alpha = 0.55f), RoundedCornerShape(10.dp))
+                            } else {
+                                Modifier
+                            }
+                        )
                         .background(Color.White.copy(alpha = 0.78f), RoundedCornerShape(10.dp))
-                )
+                        .clickable(onClick = onCaptionClick)
+                        .padding(horizontal = 12.dp, vertical = 7.dp)
+                ) {
+                    if (captionSelected) {
+                        BasicTextField(
+                            value = slot.caption,
+                            onValueChange = onCaptionChange,
+                            textStyle = MaterialTheme.typography.bodyMedium.merge(
+                                TextStyle(color = Color.Black, fontWeight = FontWeight.SemiBold)
+                            ),
+                            modifier = Modifier.clickable(onClick = onCaptionClick)
+                        )
+                    } else {
+                        Text(
+                            text = slot.caption,
+                            color = Color.Black,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    if (captionSelected) {
+                        CloseButton(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .offset(x = 20.dp, y = (-18).dp),
+                            onClick = onCaptionDelete
+                        )
+                    }
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun CloseButton(
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = modifier
+            .size(22.dp)
+            .clip(CircleShape)
+            .background(Color.Black.copy(alpha = 0.72f))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = Icons.Default.Close,
+            contentDescription = "Удалить",
+            tint = Color.White,
+            modifier = Modifier.size(14.dp)
+        )
     }
 }
