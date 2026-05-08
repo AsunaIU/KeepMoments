@@ -303,7 +303,7 @@ private fun LatestBookCard(
                             modifier = Modifier.wrapContentWidth()
                         ) {
                             Text(
-                                "Редактировать макет",
+                                "Просмотр макета",
                                 maxLines = 1
                             )
                         }
