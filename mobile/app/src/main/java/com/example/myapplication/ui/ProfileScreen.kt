@@ -58,8 +58,12 @@ import com.example.myapplication.model.BookDraftSummary
 import com.example.myapplication.model.DraftOwnerType
 import com.example.myapplication.ui.theme.Blue40
 import com.example.myapplication.ui.theme.KeepMomentsTheme
-import com.example.myapplication.ui.theme.ScreenBg
-import com.example.myapplication.ui.theme.TextSecondary
+import com.example.myapplication.ui.theme.appBackground
+import com.example.myapplication.ui.theme.appBorder
+import com.example.myapplication.ui.theme.appSurface
+import com.example.myapplication.ui.theme.appSurfaceVariant
+import com.example.myapplication.ui.theme.appTextPrimary
+import com.example.myapplication.ui.theme.appTextSecondary
 import com.example.myapplication.viewmodel.ProfileUiState
 import java.text.DateFormat
 import java.util.Date
@@ -84,7 +88,7 @@ fun ProfileScreen(
 
     Scaffold(
         modifier = modifier,
-        containerColor = ScreenBg,
+        containerColor = appBackground(),
         topBar = {
             CenterAlignedTopAppBar(
                 navigationIcon = {
@@ -195,7 +199,7 @@ fun ProfileScreen(
 @Composable
 private fun ProfileHeaderCard(uiState: ProfileUiState) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = appSurface()),
         shape = RoundedCornerShape(24.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
@@ -220,7 +224,7 @@ private fun ProfileHeaderCard(uiState: ProfileUiState) {
                 Text(
                     text = uiState.emailLabel,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = TextSecondary
+                    color = appTextSecondary()
                 )
             }
         }
@@ -240,7 +244,7 @@ private fun LatestBookCard(
     val title = draft.displayTitle
 
     Card(
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = appSurface()),
         shape = RoundedCornerShape(24.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
@@ -287,14 +291,14 @@ private fun LatestBookCard(
                                 Icon(
                                     imageVector = Icons.Default.Edit,
                                     contentDescription = "Переименовать фотокнигу",
-                                    tint = TextSecondary,
+                                    tint = appTextSecondary(),
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
                         }
                         Text(
                             text = "Сохранено: $savedAtLabel • ${draft.photoCount} фото • Черновик",
-                            color = TextSecondary,
+                            color = appTextSecondary(),
                             style = MaterialTheme.typography.bodySmall
                         )
                         TextButton(
@@ -344,7 +348,7 @@ private fun EmptyBooksCard(
     onCreateNewClick: () -> Unit
 ) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = appSurface()),
         shape = RoundedCornerShape(24.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
@@ -362,7 +366,7 @@ private fun EmptyBooksCard(
             Text(
                 text = "Создайте первую фотокнигу, и она появится в профиле.",
                 style = MaterialTheme.typography.bodyMedium,
-                color = TextSecondary
+                color = appTextSecondary()
             )
             TextButton(onClick = onCreateNewClick) {
                 Text("Создать новую")
@@ -376,7 +380,7 @@ private fun MenuCard(
     onSettingsClick: () -> Unit
 ) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = appSurface()),
         shape = RoundedCornerShape(24.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
@@ -429,18 +433,18 @@ private fun MenuRow(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = if (enabled) TextSecondary else TextSecondary.copy(alpha = 0.45f)
+            tint = if (enabled) appTextSecondary() else appTextSecondary().copy(alpha = 0.45f)
         )
         Text(
             text = title,
             modifier = Modifier.weight(1f),
-            color = if (enabled) MaterialTheme.colorScheme.onSurface else TextSecondary.copy(alpha = 0.55f),
+            color = if (enabled) appTextPrimary() else appTextSecondary().copy(alpha = 0.55f),
             style = MaterialTheme.typography.bodyLarge
         )
         Icon(
             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
             contentDescription = null,
-            tint = if (enabled) TextSecondary.copy(alpha = 0.75f) else TextSecondary.copy(alpha = 0.32f)
+            tint = if (enabled) appTextSecondary().copy(alpha = 0.75f) else appTextSecondary().copy(alpha = 0.32f)
         )
     }
 }
@@ -451,7 +455,7 @@ private fun DividerLine() {
         modifier = Modifier
             .fillMaxWidth()
             .height(1.dp)
-            .background(Color(0xFFF0F1F5))
+            .background(appBorder())
     )
 }
 
@@ -517,7 +521,7 @@ private fun BookCoverPreview(
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(18.dp))
-            .background(Color(0xFFF0F1F5)),
+            .background(appSurfaceVariant()),
         contentAlignment = Alignment.Center
     ) {
         if (coverUriString != null) {
@@ -531,7 +535,7 @@ private fun BookCoverPreview(
             Icon(
                 imageVector = Icons.Default.Image,
                 contentDescription = null,
-                tint = TextSecondary
+                tint = appTextSecondary()
             )
         }
     }

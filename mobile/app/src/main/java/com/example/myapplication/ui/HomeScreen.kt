@@ -36,7 +36,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import com.example.myapplication.R
 import com.example.myapplication.ui.theme.KeepMomentsTheme
-import com.example.myapplication.ui.theme.ScreenBg
+import com.example.myapplication.ui.theme.appBackground
+import com.example.myapplication.ui.theme.appSurface
+import com.example.myapplication.ui.theme.appTextPrimary
 
 @Composable
 fun HomeScreen(
@@ -61,7 +63,7 @@ fun HomeScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(ScreenBg)
+            .background(appBackground())
     ) {
         Column(
             modifier = Modifier
@@ -102,7 +104,7 @@ fun HomeScreen(
                             .offset(x = offsetX, y = offsetY)
                             .graphicsLayer { rotationZ = rotation }
                             .clip(RoundedCornerShape(20.dp))
-                            .background(Color.White)
+                            .background(appSurface())
                             .padding(4.dp)
                             .zIndex(index.toFloat())
                     ) {
@@ -125,7 +127,7 @@ fun HomeScreen(
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 24.sp,
                 textAlign = TextAlign.Center,
-                color = Color(0xFF1F1F1F)
+                color = appTextPrimary()
             )
 
             if (isAuthenticated) {
@@ -142,7 +144,7 @@ fun HomeScreen(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     textAlign = TextAlign.Center,
-                    color = Color(0xFF1F1F1F)
+                    color = appTextPrimary()
                 )
             }
 

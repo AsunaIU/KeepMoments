@@ -45,8 +45,9 @@ import com.example.myapplication.model.DraftOwnerType
 import com.example.myapplication.model.EditableAlbum
 import com.example.myapplication.model.SelectedPhoto
 import com.example.myapplication.ui.theme.KeepMomentsTheme
-import com.example.myapplication.ui.theme.ScreenBg
-import com.example.myapplication.ui.theme.TextSecondary
+import com.example.myapplication.ui.theme.appBackground
+import com.example.myapplication.ui.theme.appSurface
+import com.example.myapplication.ui.theme.appTextSecondary
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,7 +66,7 @@ fun RenderedBookScreen(
 
     Scaffold(
         modifier = modifier,
-        containerColor = ScreenBg,
+        containerColor = appBackground(),
         topBar = {
             TopAppBar(
                 title = {
@@ -88,7 +89,7 @@ fun RenderedBookScreen(
         },
         bottomBar = {
             Surface(
-                color = ScreenBg,
+                color = appBackground(),
                 modifier = Modifier
                     .fillMaxWidth()
                     .navigationBarsPadding()
@@ -139,7 +140,7 @@ fun RenderedBookScreen(
                 Text(
                     text = "Страницы пока не готовы",
                     style = MaterialTheme.typography.titleMedium,
-                    color = TextSecondary
+                    color = appTextSecondary()
                 )
             }
         } else {
@@ -161,7 +162,7 @@ fun RenderedBookScreen(
                             .fillMaxWidth()
                             .aspectRatio(0.72f),
                         shape = RoundedCornerShape(28.dp),
-                        color = Color.White,
+                        color = appSurface(),
                         shadowElevation = 2.dp
                     ) {
                         Box(modifier = Modifier.padding(16.dp)) {
@@ -177,7 +178,7 @@ fun RenderedBookScreen(
                     Text(
                         text = "Свайпайте влево и вправо, чтобы перелистывать страницы",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = TextSecondary,
+                        color = appTextSecondary(),
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -194,7 +195,7 @@ private fun PreviewRenderedBookScreen() {
     KeepMomentsTheme {
         RenderedBookScreen(
             album = EditableAlbum(
-                draft = BookDraft("draft-1", DraftOwnerType.GUEST, null, null, 0L, 0L, listOf(photo)),
+                draft = BookDraft("draft-1", DraftOwnerType.GUEST, null, null, null, true, 0L, 0L, listOf(photo)),
                 pages = listOf(
                     AlbumPage(
                         id = "page-1",
