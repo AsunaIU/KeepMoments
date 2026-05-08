@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.data.auth.AuthRepository
+import com.example.myapplication.data.album.AlbumRepository
 import com.example.myapplication.data.books.BooksRepository
 import com.example.myapplication.data.books.RenderedBookStore
 import com.example.myapplication.data.draft.DraftRepository
@@ -30,7 +31,8 @@ class DraftEditorViewModel(
     private val authRepository: AuthRepository,
     private val photoImportService: PhotoImportService,
     private val booksRepository: BooksRepository,
-    private val renderedBookStore: RenderedBookStore
+    private val renderedBookStore: RenderedBookStore,
+    private val albumRepository: AlbumRepository
 ) : ViewModel() {
 
     companion object {
@@ -189,6 +191,7 @@ class DraftEditorViewModel(
 
             result.onSuccess { book ->
                 renderedBookStore.save(draftId = draftId, book = book)
+                albumRepository.createInitialAlbumFromRenderedBook(book)
                 Log.d(TAG, "continue success draftId=$draftId navigate rendered")
                 _generatedBookDraftId.value = draftId
             }.onFailure { throwable ->
@@ -216,7 +219,8 @@ class DraftEditorViewModel(
         private val authRepository: AuthRepository,
         private val photoImportService: PhotoImportService,
         private val booksRepository: BooksRepository,
-        private val renderedBookStore: RenderedBookStore
+        private val renderedBookStore: RenderedBookStore,
+        private val albumRepository: AlbumRepository
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -227,7 +231,8 @@ class DraftEditorViewModel(
                     authRepository = authRepository,
                     photoImportService = photoImportService,
                     booksRepository = booksRepository,
-                    renderedBookStore = renderedBookStore
+                    renderedBookStore = renderedBookStore,
+                    albumRepository = albumRepository
                 ) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")

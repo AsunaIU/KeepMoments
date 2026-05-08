@@ -17,4 +17,10 @@ sealed class AppDestination(val route: String) {
 
         fun createRoute(draftId: String): String = "rendered/$draftId"
     }
+
+    data object AlbumEditor : AppDestination("album-editor/{draftId}") {
+        const val DRAFT_ID_ARG = "draftId"
+
+        fun createRoute(draftId: String): String = "album-editor/$draftId"
+    }
 }
