@@ -80,7 +80,7 @@ class AppContainer(
 
     private val draftDatabase: DraftDatabase by lazy {
         Room.databaseBuilder(appContext, DraftDatabase::class.java, "keepmoments.db")
-            .addMigrations(MIGRATION_2_3)
+            .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
             .fallbackToDestructiveMigration()
             .build()
     }
@@ -194,6 +194,12 @@ class AppContainer(
                 )
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_album_stickers_pageId ON album_stickers(pageId)")
                 db.execSQL("CREATE INDEX IF NOT EXISTS index_album_stickers_zIndex ON album_stickers(zIndex)")
+            }
+        }
+
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE drafts ADD COLUMN generateCaptions INTEGER NOT NULL DEFAULT 1")
             }
         }
     }

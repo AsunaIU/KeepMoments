@@ -53,8 +53,10 @@ import com.example.myapplication.model.DraftOwnerType
 import com.example.myapplication.model.SelectedPhoto
 import com.example.myapplication.ui.theme.Blue40
 import com.example.myapplication.ui.theme.KeepMomentsTheme
-import com.example.myapplication.ui.theme.ScreenBg
-import com.example.myapplication.ui.theme.TextSecondary
+import com.example.myapplication.ui.theme.appBackground
+import com.example.myapplication.ui.theme.appSurface
+import com.example.myapplication.ui.theme.appTextPrimary
+import com.example.myapplication.ui.theme.appTextSecondary
 import com.example.myapplication.viewmodel.DraftEditorUiState
 import com.example.myapplication.viewmodel.DraftEditorViewModel
 
@@ -75,7 +77,7 @@ fun PhotoPreviewScreen(
 
     Scaffold(
         modifier = modifier,
-        containerColor = ScreenBg,
+        containerColor = appBackground(),
         topBar = {
             CenterAlignedTopAppBar(
                 title = {
@@ -84,7 +86,7 @@ fun PhotoPreviewScreen(
                             text = "Выбор фото",
                             fontSize = 18.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = Color.Black
+                            color = appTextPrimary()
                         )
                         Spacer(Modifier.height(2.dp))
                         Text(
@@ -94,7 +96,7 @@ fun PhotoPreviewScreen(
                                 else -> "${uiState.selectedPhotos.size}/${DraftEditorViewModel.PHOTO_LIMIT} выбрано"
                             },
                             fontSize = 13.sp,
-                            color = TextSecondary
+                            color = appTextSecondary()
                         )
                     }
                 },
@@ -111,7 +113,7 @@ fun PhotoPreviewScreen(
         bottomBar = {
             if (!uiState.isMissing) {
                 Surface(
-                    color = ScreenBg,
+                    color = appBackground(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .navigationBarsPadding()
@@ -122,7 +124,7 @@ fun PhotoPreviewScreen(
                     ) {
                         Text(
                             text = "Валидных фото: $validPhotosCount",
-                            color = TextSecondary,
+                            color = appTextSecondary(),
                             style = MaterialTheme.typography.bodySmall
                         )
                         Button(
@@ -193,7 +195,9 @@ fun PhotoPreviewScreen(
                     } else {
                         LazyVerticalGrid(
                             columns = GridCells.Adaptive(minSize = 140.dp),
-                            modifier = Modifier.fillMaxSize(),
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth(),
                             contentPadding = PaddingValues(bottom = 16.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -229,7 +233,7 @@ private fun OwnerHint(ownerType: DraftOwnerType?) {
     if (text.isNotBlank()) {
         Text(
             text = text,
-            color = TextSecondary,
+            color = appTextSecondary(),
             style = MaterialTheme.typography.bodyMedium
         )
     }
@@ -255,7 +259,7 @@ private fun MissingDraftState(
             )
             Text(
                 text = "Возможно, он принадлежит другому аккаунту или был удалён.",
-                color = TextSecondary
+                color = appTextSecondary()
             )
             Button(onClick = onOpenDraftsClick) {
                 Text("К списку черновиков")
@@ -283,7 +287,7 @@ private fun EmptyDraftPhotosState(
             )
             Text(
                 text = "Добавьте ещё фото, чтобы продолжить.",
-                color = TextSecondary
+                color = appTextSecondary()
             )
             Button(onClick = onAddMoreClick) {
                 Text("Добавить фото")
@@ -380,7 +384,7 @@ private fun AddMoreTile(
             .fillMaxWidth()
             .aspectRatio(1f)
             .clip(RoundedCornerShape(18.dp))
-            .background(Color.White)
+            .background(appSurface())
             .border(1.5.dp, Color(0xFFD7D3F5), RoundedCornerShape(18.dp))
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center
@@ -392,11 +396,11 @@ private fun AddMoreTile(
             Icon(
                 imageVector = Icons.Default.AddPhotoAlternate,
                 contentDescription = "Добавить фото",
-                tint = TextSecondary
+                tint = appTextSecondary()
             )
             Text(
                 text = "Добавить",
-                color = TextSecondary,
+                color = appTextSecondary(),
                 style = MaterialTheme.typography.bodyMedium
             )
         }

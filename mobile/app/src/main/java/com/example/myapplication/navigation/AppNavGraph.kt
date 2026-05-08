@@ -36,6 +36,7 @@ import com.example.myapplication.ui.PhotoPreviewScreen
 import com.example.myapplication.ui.ProfileScreen
 import com.example.myapplication.ui.ProfileSettingsScreen
 import com.example.myapplication.ui.RenderedBookScreen
+import com.example.myapplication.ui.StoryPromptScreen
 import com.example.myapplication.viewmodel.AlbumEditorEvent
 import com.example.myapplication.viewmodel.AlbumEditorNavigation
 import com.example.myapplication.viewmodel.AlbumEditorViewModel
@@ -128,9 +129,7 @@ fun AppNavGraph(
                     isCreatingDraft = draftsUiState.isCreating,
                     onCreateBookClick = {
                         if (authUiState.isAuthenticated) {
-                            launcher.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                            )
+                            navController.navigate(AppDestination.StoryPrompt.route)
                         } else {
                             Log.d(navigationTag, "create book requires auth from home")
                             navController.navigate(AppDestination.Auth.route)
@@ -139,6 +138,40 @@ fun AppNavGraph(
                     onProfileClick = { navController.navigate(AppDestination.Profile.route) },
                     onAuthClick = { navController.navigate(AppDestination.Auth.route) },
                     onLogoutClick = authViewModel::logout
+                )
+            }
+
+            composable(AppDestination.StoryPrompt.route) {
+                val storyPrompt = rememberSaveable { mutableStateOf("") }
+                val generateCaptions = rememberSaveable { mutableStateOf(true) }
+                val launcher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = DraftsViewModel.PHOTO_LIMIT)
+                ) { uris ->
+                    if (uris.isNotEmpty()) {
+                        persistReadPermissions(context, uris)
+                        scope.launch {
+                            val draftId = draftsViewModel.createDraftFromUris(
+                                uris = uris,
+                                storyPrompt = storyPrompt.value,
+                                generateCaptions = generateCaptions.value
+                            )
+                            if (draftId != null) {
+                                navController.navigate(AppDestination.Preview.createRoute(draftId))
+                            }
+                        }
+                    }
+                }
+
+                StoryPromptScreen(
+                    storyPrompt = storyPrompt.value,
+                    generateCaptions = generateCaptions.value,
+                    isCreatingDraft = draftsUiState.isCreating,
+                    onBackClick = { navController.popBackStack() },
+                    onStoryPromptChange = { storyPrompt.value = it },
+                    onGenerateCaptionsChange = { generateCaptions.value = it },
+                    onPickPhotosClick = {
+                        launcher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                    }
                 )
             }
 
@@ -205,16 +238,21 @@ fun AppNavGraph(
                     },
                     onCreateNewClick = {
                         if (authUiState.isAuthenticated) {
-                            launcher.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                            )
+                            navController.navigate(AppDestination.StoryPrompt.route)
                         } else {
                             Log.d(navigationTag, "create book requires auth from profile")
                             navController.navigate(AppDestination.Auth.route)
                         }
                     },
                     onOpenDraftClick = { draftId ->
-                        navController.navigate(AppDestination.Preview.createRoute(draftId))
+                        scope.launch {
+                            val hasAlbum = appContainer.albumRepository.ensureDemoAlbumForDraft(draftId)
+                            if (hasAlbum) {
+                                navController.navigate(AppDestination.Rendered.createRoute(draftId))
+                            } else {
+                                snackbarHostState.showSnackbar("Добавьте фото, чтобы посмотреть макет")
+                            }
+                        }
                     },
                     onAllBooksClick = { navController.navigate(AppDestination.Drafts.route) },
                     onSettingsClick = { navController.navigate(AppDestination.ProfileSettings.route) },
@@ -451,6 +489,9 @@ fun AppNavGraph(
                     onPageChange = albumEditorViewModel::requestPageChange,
                     onSlotClick = albumEditorViewModel::selectSlot,
                     onEmptySlotClick = albumEditorViewModel::selectEmptySlot,
+                    onCaptionClick = albumEditorViewModel::selectCaption,
+                    onCaptionChange = albumEditorViewModel::updateCaptionText,
+                    onCaptionDeleteClick = albumEditorViewModel::deleteCaption,
                     onDismissSlotMenu = albumEditorViewModel::dismissSlotMenu,
                     onReplaceSlotClick = albumEditorViewModel::startReplaceSelectedSlot,
                     onDeleteSlotClick = albumEditorViewModel::deleteSelectedSlotPhoto,

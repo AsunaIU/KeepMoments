@@ -18,6 +18,7 @@ data class BookDraftEntity(
     val title: String?,
     val bookType: String,
     val storyPrompt: String?,
+    val generateCaptions: Boolean = true,
     val styleId: String?,
     val tone: String?,
     val fontSet: String?,

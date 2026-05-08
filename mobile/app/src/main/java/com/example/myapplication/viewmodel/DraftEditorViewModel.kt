@@ -37,6 +37,7 @@ class DraftEditorViewModel(
 
     companion object {
         const val PHOTO_LIMIT = 50
+        const val STORY_PROMPT_LIMIT = 500
         private const val TAG = "DraftEditor"
     }
 
@@ -111,6 +112,7 @@ class DraftEditorViewModel(
         DraftEditorUiState(
             draftId = draftId,
             ownerType = draft?.ownerType,
+            storyPrompt = draft?.storyPrompt.orEmpty(),
             selectedPhotos = draft?.selectedPhotos.orEmpty(),
             isLoading = !transientState.hasLoadedDraft,
             isProcessing = transientState.isProcessing,
@@ -165,6 +167,15 @@ class DraftEditorViewModel(
         }
     }
 
+    fun onStoryPromptChanged(value: String) {
+        viewModelScope.launch {
+            draftRepository.updateDraftStoryPrompt(
+                draftId = draftId,
+                storyPrompt = value.take(STORY_PROMPT_LIMIT)
+            )
+        }
+    }
+
     fun onContinueClicked() {
         val currentDraft = draftFlow.value
         Log.d(TAG, "continue clicked draftId=$draftId")
@@ -186,6 +197,10 @@ class DraftEditorViewModel(
             Log.d(TAG, "continue generating book draftId=$draftId")
             _isGeneratingBook.value = true
             _errorMessage.value = null
+            draftRepository.updateDraftStoryPrompt(
+                draftId = draftId,
+                storyPrompt = currentDraft.storyPrompt
+            )
             val result = booksRepository.generateRenderedBook(currentDraft)
             _isGeneratingBook.value = false
 
@@ -243,6 +258,7 @@ class DraftEditorViewModel(
 data class DraftEditorUiState(
     val draftId: String,
     val ownerType: DraftOwnerType? = null,
+    val storyPrompt: String = "",
     val selectedPhotos: List<SelectedPhoto> = emptyList(),
     val isLoading: Boolean = false,
     val isProcessing: Boolean = false,

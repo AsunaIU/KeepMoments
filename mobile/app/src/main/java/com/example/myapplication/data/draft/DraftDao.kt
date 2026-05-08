@@ -46,4 +46,10 @@ interface DraftDao {
 
     @Query("UPDATE drafts SET title = :title, updatedAt = :timestamp WHERE id = :draftId")
     suspend fun updateDraftTitle(draftId: String, title: String?, timestamp: Long)
+
+    @Query("UPDATE drafts SET storyPrompt = :storyPrompt, updatedAt = :timestamp WHERE id = :draftId")
+    suspend fun updateDraftStoryPrompt(draftId: String, storyPrompt: String?, timestamp: Long)
+
+    @Query("UPDATE drafts SET generateCaptions = :generateCaptions, updatedAt = :timestamp WHERE id = :draftId")
+    suspend fun updateDraftGenerateCaptions(draftId: String, generateCaptions: Boolean, timestamp: Long)
 }
