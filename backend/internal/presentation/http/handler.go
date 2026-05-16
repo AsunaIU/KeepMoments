@@ -88,7 +88,7 @@ func (h *Handler) Process(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, validation := h.processService.Process(r.Context(), logic.ResolvedProcessRequest{
+	result, validation, err := h.processService.Process(r.Context(), logic.ResolvedProcessRequest{
 		PhotoIDs:        req.PhotoIDs,
 		UserDescription: req.UserDescription,
 		MinPhotos:       req.MinPhotos,
@@ -100,6 +100,17 @@ func (h *Handler) Process(w http.ResponseWriter, r *http.Request) {
 	})
 	if validation != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, validation)
+		return
+	}
+	if err != nil {
+		var upstreamErr *logic.UpstreamProcessError
+		if errors.As(err, &upstreamErr) {
+			writeRaw(w, upstreamErr.StatusCode, upstreamErr.ContentType, upstreamErr.Body)
+			return
+		}
+
+		h.logger.Error("process upstream failed", "error", err, "template_id", req.TemplateID)
+		writeError(w, http.StatusBadGateway, "failed to process request")
 		return
 	}
 
@@ -510,6 +521,16 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
+}
+
+func writeRaw(w http.ResponseWriter, status int, contentType string, payload []byte) {
+	if strings.TrimSpace(contentType) == "" {
+		contentType = "application/json"
+	}
+
+	w.Header().Set("Content-Type", contentType)
+	w.WriteHeader(status)
+	_, _ = w.Write(payload)
 }
 
 func parseInt64Path(r *http.Request, key string) (int64, error) {

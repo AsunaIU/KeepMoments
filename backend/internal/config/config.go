@@ -11,6 +11,7 @@ type Config struct {
 	Postgres PostgresConfig
 	S3       S3Config
 	Auth     AuthConfig
+	Process  ProcessConfig
 }
 
 type PostgresConfig struct {
@@ -37,6 +38,10 @@ type AuthConfig struct {
 	RefreshTokenTTLHour int
 }
 
+type ProcessConfig struct {
+	Endpoint string
+}
+
 func Load() (Config, error) {
 	cfg := Config{
 		AppEnv:   getEnv("APP_ENV", "local"),
@@ -61,6 +66,9 @@ func Load() (Config, error) {
 			JWTSecret:           getEnv("AUTH_JWT_SECRET", "super-secret-change-me"),
 			AccessTokenTTLMin:   getEnvAsInt("AUTH_ACCESS_TOKEN_TTL_MINUTES", 15),
 			RefreshTokenTTLHour: getEnvAsInt("AUTH_REFRESH_TOKEN_TTL_HOURS", 720),
+		},
+		Process: ProcessConfig{
+			Endpoint: getEnv("PROCESS_ENDPOINT", "http://213.176.113.233:8555"),
 		},
 	}
 
@@ -94,6 +102,10 @@ func (c Config) Validate() error {
 
 	if c.Auth.JWTSecret == "" {
 		return fmt.Errorf("auth config is incomplete")
+	}
+
+	if c.Process.Endpoint == "" {
+		return fmt.Errorf("process config is incomplete")
 	}
 
 	return nil

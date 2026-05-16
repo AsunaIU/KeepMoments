@@ -1,14 +1,30 @@
 package logic
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
 	"strings"
+	"time"
+
+	"keepmoments/backend/internal/config"
 )
 
-type ProcessService struct{}
+type ProcessService struct {
+	endpoint string
+	client   *http.Client
+}
 
-func NewProcessService() *ProcessService {
-	return &ProcessService{}
+func NewProcessService(cfg config.ProcessConfig) *ProcessService {
+	return &ProcessService{
+		endpoint: strings.TrimRight(cfg.Endpoint, "/"),
+		client: &http.Client{
+			Timeout: 60 * time.Second,
+		},
+	}
 }
 
 type ProcessRequest struct {
@@ -25,6 +41,14 @@ type ResolvedProcessRequest struct {
 	MinPhotos       int
 	MaxPhotos       int
 	Template        ProcessTemplate
+}
+
+type mlProcessRequest struct {
+	PhotoIDs        []string        `json:"photo_ids"`
+	UserDescription string          `json:"user_description"`
+	MinPhotos       int             `json:"min_photos"`
+	MaxPhotos       int             `json:"max_photos"`
+	Template        ProcessTemplate `json:"template"`
 }
 
 type ProcessTemplate struct {
@@ -71,74 +95,64 @@ type HTTPValidationError struct {
 	Detail []ValidationError `json:"detail"`
 }
 
-func (s *ProcessService) Process(_ context.Context, req ResolvedProcessRequest) (ProcessResponse, *HTTPValidationError) {
-	if validation := validateResolvedProcessRequest(req); validation != nil {
-		return ProcessResponse{}, validation
+type UpstreamProcessError struct {
+	StatusCode  int
+	ContentType string
+	Body        []byte
+}
+
+func (e *UpstreamProcessError) Error() string {
+	return fmt.Sprintf("process upstream returned status %d", e.StatusCode)
+}
+
+func (s *ProcessService) Process(ctx context.Context, req ResolvedProcessRequest) (ProcessResponse, *HTTPValidationError, error) {
+	payload, err := json.Marshal(mlProcessRequest{
+		PhotoIDs:        req.PhotoIDs,
+		UserDescription: req.UserDescription,
+		MinPhotos:       req.MinPhotos,
+		MaxPhotos:       req.MaxPhotos,
+		Template:        req.Template,
+	})
+	if err != nil {
+		return ProcessResponse{}, nil, fmt.Errorf("marshal process request: %w", err)
 	}
 
-	usablePhotoIDs := req.PhotoIDs
-	if len(usablePhotoIDs) > req.MaxPhotos {
-		usablePhotoIDs = usablePhotoIDs[:req.MaxPhotos]
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, s.endpoint+"/process", bytes.NewReader(payload))
+	if err != nil {
+		return ProcessResponse{}, nil, fmt.Errorf("build process request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "application/json")
+
+	resp, err := s.client.Do(httpReq)
+	if err != nil {
+		return ProcessResponse{}, nil, fmt.Errorf("call process upstream: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return ProcessResponse{}, nil, fmt.Errorf("read process upstream response: %w", err)
 	}
 
-	photoIndex := 0
-	filledPages := make([]FilledPage, 0, len(req.Template.Pages))
-	for _, page := range req.Template.Pages {
-		filledSlots := make([]FilledSlot, 0, len(page.Slots))
-		for _, slot := range page.Slots {
-			var assignedPhotoID *string
-			if photoIndex < len(usablePhotoIDs) {
-				photoID := usablePhotoIDs[photoIndex]
-				assignedPhotoID = &photoID
-				photoIndex++
-			}
-
-			filledSlots = append(filledSlots, FilledSlot{
-				ID:      slot.ID,
-				PhotoID: assignedPhotoID,
-			})
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return ProcessResponse{}, nil, &UpstreamProcessError{
+			StatusCode:  resp.StatusCode,
+			ContentType: resp.Header.Get("Content-Type"),
+			Body:        body,
 		}
-
-		filledPages = append(filledPages, FilledPage{
-			ID:    page.ID,
-			Slots: filledSlots,
-		})
 	}
 
-	return ProcessResponse{
-		FilledTemplate: FilledTemplate{
-			ID:    req.Template.ID,
-			Pages: filledPages,
-		},
-	}, nil
+	var result ProcessResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return ProcessResponse{}, nil, fmt.Errorf("decode process upstream response: %w", err)
+	}
+
+	return result, nil, nil
 }
 
 func ValidateProcessRequest(req ProcessRequest) *HTTPValidationError {
 	var details []ValidationError
-
-	if len(req.PhotoIDs) == 0 {
-		details = append(details, validationError([]any{"body", "photo_ids"}, "photo_ids must not be empty", "value_error"))
-	}
-
-	if strings.TrimSpace(req.UserDescription) == "" {
-		details = append(details, validationError([]any{"body", "user_description"}, "user_description is required", "value_error"))
-	}
-
-	if req.MinPhotos < 1 {
-		details = append(details, validationError([]any{"body", "min_photos"}, "min_photos must be greater than or equal to 1", "value_error"))
-	}
-
-	if req.MaxPhotos < 1 {
-		details = append(details, validationError([]any{"body", "max_photos"}, "max_photos must be greater than or equal to 1", "value_error"))
-	}
-
-	if req.MinPhotos > 0 && req.MaxPhotos > 0 && req.MaxPhotos < req.MinPhotos {
-		details = append(details, validationError([]any{"body", "max_photos"}, "max_photos must be greater than or equal to min_photos", "value_error"))
-	}
-
-	if req.MinPhotos > 0 && len(req.PhotoIDs) < req.MinPhotos {
-		details = append(details, validationError([]any{"body", "photo_ids"}, "photo_ids count is less than min_photos", "value_error"))
-	}
 
 	if strings.TrimSpace(req.TemplateID) == "" {
 		details = append(details, validationError([]any{"body", "template_id"}, "template_id is required", "value_error"))

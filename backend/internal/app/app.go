@@ -57,7 +57,7 @@ func New(ctx context.Context) (*App, error) {
 	refreshTokenRepo := repository.NewRefreshTokenRepository(pg.Pool)
 	templateService := logic.NewTemplateService(templateRepo)
 	photoService := logic.NewPhotoService(photoRepo, s3Client.Storage)
-	processService := logic.NewProcessService()
+	processService := logic.NewProcessService(cfg.Process)
 	tokenService := logic.NewTokenService(cfg.Auth, refreshTokenRepo)
 	authService := logic.NewAuthService(userRepo, tokenService)
 	handler := httptransport.NewHandler(templateService, photoService, processService, authService, tokenService, logger)
