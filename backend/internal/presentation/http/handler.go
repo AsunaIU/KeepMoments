@@ -93,10 +93,7 @@ func (h *Handler) Process(w http.ResponseWriter, r *http.Request) {
 		UserDescription: req.UserDescription,
 		MinPhotos:       req.MinPhotos,
 		MaxPhotos:       req.MaxPhotos,
-		Template: logic.ProcessTemplate{
-			ID:    template.ID,
-			Pages: template.Pages,
-		},
+		Template:        template,
 	})
 	if validation != nil {
 		writeJSON(w, http.StatusUnprocessableEntity, validation)
@@ -254,6 +251,8 @@ func (h *Handler) CreateTemplate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid json body")
 		return
 	}
+
+	logic.NormalizeTemplate(&req)
 
 	validation := logic.ValidateTemplate(req)
 	if validation != nil {

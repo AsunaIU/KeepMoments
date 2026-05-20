@@ -32,15 +32,33 @@ func (r *TemplateRepository) Create(ctx context.Context, params model.CreateTemp
 
 	var template model.Template
 	err = tx.QueryRow(ctx, `
-		INSERT INTO templates (id)
-		VALUES ($1)
+		INSERT INTO templates (
+			id,
+			front_cover_mode,
+			front_cover_photo_id,
+			front_cover_text,
+			back_cover_mode,
+			back_cover_photo_id,
+			back_cover_text
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id, created_at
-	`, params.ID).Scan(&template.ID, &template.CreatedAt)
+	`,
+		params.ID,
+		coverMode(params.FrontCover),
+		coverPhotoID(params.FrontCover),
+		coverText(params.FrontCover),
+		coverMode(params.BackCover),
+		coverPhotoID(params.BackCover),
+		coverText(params.BackCover),
+	).Scan(&template.ID, &template.CreatedAt)
 	if err != nil {
 		return model.Template{}, fmt.Errorf("insert template: %w", err)
 	}
 
 	template.Pages = params.Pages
+	template.FrontCover = params.FrontCover
+	template.BackCover = params.BackCover
 
 	for pageIndex, page := range params.Pages {
 		_, err = tx.Exec(ctx, `
@@ -53,9 +71,9 @@ func (r *TemplateRepository) Create(ctx context.Context, params model.CreateTemp
 
 		for slotIndex, slot := range page.Slots {
 			_, err = tx.Exec(ctx, `
-				INSERT INTO template_slots (template_id, page_id, id, photo_id, slot_order)
-				VALUES ($1, $2, $3, $4, $5)
-			`, params.ID, page.ID, slot.ID, slot.PhotoID, slotIndex)
+				INSERT INTO template_slots (template_id, page_id, id, photo_id, required_orientation, slot_order)
+				VALUES ($1, $2, $3, $4, $5, $6)
+			`, params.ID, page.ID, slot.ID, slot.PhotoID, slot.RequiredOrientation, slotIndex)
 			if err != nil {
 				return model.Template{}, fmt.Errorf("insert template slot: %w", err)
 			}
@@ -74,9 +92,16 @@ func (r *TemplateRepository) GetByID(ctx context.Context, id string) (model.Temp
 		SELECT
 			t.id,
 			t.created_at,
+			t.front_cover_mode,
+			t.front_cover_photo_id,
+			t.front_cover_text,
+			t.back_cover_mode,
+			t.back_cover_photo_id,
+			t.back_cover_text,
 			p.id AS page_id,
 			s.id AS slot_id,
-			s.photo_id
+			s.photo_id,
+			s.required_orientation
 		FROM templates t
 		LEFT JOIN template_pages p ON p.template_id = t.id
 		LEFT JOIN template_slots s ON s.template_id = t.id AND s.page_id = p.id
@@ -99,9 +124,16 @@ func (r *TemplateRepository) List(ctx context.Context) ([]model.Template, error)
 		SELECT
 			t.id,
 			t.created_at,
+			t.front_cover_mode,
+			t.front_cover_photo_id,
+			t.front_cover_text,
+			t.back_cover_mode,
+			t.back_cover_photo_id,
+			t.back_cover_text,
 			p.id AS page_id,
 			s.id AS slot_id,
-			s.photo_id
+			s.photo_id,
+			s.required_orientation
 		FROM templates t
 		LEFT JOIN template_pages p ON p.template_id = t.id
 		LEFT JOIN template_slots s ON s.template_id = t.id AND s.page_id = p.id
@@ -142,21 +174,43 @@ func (r *TemplateRepository) queryTemplates(ctx context.Context, query string, a
 		var (
 			templateID string
 			createdAt  sql.NullTime
+			frontMode  sql.NullString
+			frontPhoto sql.NullString
+			frontText  sql.NullString
+			backMode   sql.NullString
+			backPhoto  sql.NullString
+			backText   sql.NullString
 			pageID     sql.NullString
 			slotID     sql.NullString
 			photoID    sql.NullString
+			orient     sql.NullString
 		)
 
-		if err := rows.Scan(&templateID, &createdAt, &pageID, &slotID, &photoID); err != nil {
+		if err := rows.Scan(
+			&templateID,
+			&createdAt,
+			&frontMode,
+			&frontPhoto,
+			&frontText,
+			&backMode,
+			&backPhoto,
+			&backText,
+			&pageID,
+			&slotID,
+			&photoID,
+			&orient,
+		); err != nil {
 			return nil, fmt.Errorf("scan template tree: %w", err)
 		}
 
 		templateIndex, exists := templateIndexes[templateID]
 		if !exists {
 			templates = append(templates, model.Template{
-				ID:        templateID,
-				CreatedAt: createdAt.Time,
-				Pages:     []model.TemplatePage{},
+				ID:         templateID,
+				CreatedAt:  createdAt.Time,
+				Pages:      []model.TemplatePage{},
+				FrontCover: scanCover(frontMode, frontPhoto, frontText),
+				BackCover:  scanCover(backMode, backPhoto, backText),
 			})
 			templateIndex = len(templates) - 1
 			templateIndexes[templateID] = templateIndex
@@ -187,9 +241,16 @@ func (r *TemplateRepository) queryTemplates(ctx context.Context, query string, a
 			slotPhotoID = &value
 		}
 
+		var requiredOrientation *string
+		if orient.Valid {
+			value := orient.String
+			requiredOrientation = &value
+		}
+
 		templates[templateIndex].Pages[pageIndex].Slots = append(templates[templateIndex].Pages[pageIndex].Slots, model.TemplateSlot{
-			ID:      slotID.String,
-			PhotoID: slotPhotoID,
+			ID:                  slotID.String,
+			PhotoID:             slotPhotoID,
+			RequiredOrientation: requiredOrientation,
 		})
 	}
 
@@ -198,4 +259,42 @@ func (r *TemplateRepository) queryTemplates(ctx context.Context, query string, a
 	}
 
 	return templates, nil
+}
+
+func coverMode(cover *model.TemplateCover) any {
+	if cover == nil {
+		return nil
+	}
+	return cover.Mode
+}
+
+func coverPhotoID(cover *model.TemplateCover) any {
+	if cover == nil {
+		return nil
+	}
+	return cover.PhotoID
+}
+
+func coverText(cover *model.TemplateCover) any {
+	if cover == nil {
+		return nil
+	}
+	return cover.Text
+}
+
+func scanCover(mode, photoID, text sql.NullString) *model.TemplateCover {
+	if !mode.Valid {
+		return nil
+	}
+
+	cover := &model.TemplateCover{
+		Mode: mode.String,
+	}
+	if photoID.Valid {
+		cover.PhotoID = &photoID.String
+	}
+	if text.Valid {
+		cover.Text = &text.String
+	}
+	return cover
 }

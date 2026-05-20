@@ -27,8 +27,10 @@ type CreateTemplateInput struct {
 
 func (s *TemplateService) Create(ctx context.Context, input CreateTemplateInput) (ProcessTemplate, error) {
 	template, err := s.repo.Create(ctx, model.CreateTemplateParams{
-		ID:    input.Template.ID,
-		Pages: mapPagesToModel(input.Template.Pages),
+		ID:         input.Template.ID,
+		Pages:      mapPagesToModel(input.Template.Pages),
+		FrontCover: mapCoverToModel(input.Template.FrontCover),
+		BackCover:  mapCoverToModel(input.Template.BackCover),
 	})
 	if err != nil {
 		return ProcessTemplate{}, err
@@ -66,8 +68,10 @@ func (s *TemplateService) Delete(ctx context.Context, id string) error {
 
 func mapTemplate(template model.Template) ProcessTemplate {
 	return ProcessTemplate{
-		ID:    template.ID,
-		Pages: mapPagesFromModel(template.Pages),
+		ID:         template.ID,
+		Pages:      mapPagesFromModel(template.Pages),
+		FrontCover: mapCoverFromModel(template.FrontCover),
+		BackCover:  mapCoverFromModel(template.BackCover),
 	}
 }
 
@@ -80,8 +84,9 @@ func mapPagesToModel(pages []ProcessPage) []model.TemplatePage {
 		}
 		for _, slot := range page.Slots {
 			modelPage.Slots = append(modelPage.Slots, model.TemplateSlot{
-				ID:      slot.ID,
-				PhotoID: slot.PhotoID,
+				ID:                  slot.ID,
+				PhotoID:             slot.PhotoID,
+				RequiredOrientation: slot.RequiredOrientation,
 			})
 		}
 		items = append(items, modelPage)
@@ -98,11 +103,36 @@ func mapPagesFromModel(pages []model.TemplatePage) []ProcessPage {
 		}
 		for _, slot := range page.Slots {
 			processPage.Slots = append(processPage.Slots, ProcessSlot{
-				ID:      slot.ID,
-				PhotoID: slot.PhotoID,
+				ID:                  slot.ID,
+				PhotoID:             slot.PhotoID,
+				RequiredOrientation: slot.RequiredOrientation,
 			})
 		}
 		items = append(items, processPage)
 	}
 	return items
+}
+
+func mapCoverToModel(cover *CoverConfig) *model.TemplateCover {
+	if cover == nil {
+		return nil
+	}
+
+	return &model.TemplateCover{
+		Mode:    cover.Mode,
+		PhotoID: cover.PhotoID,
+		Text:    cover.Text,
+	}
+}
+
+func mapCoverFromModel(cover *model.TemplateCover) *CoverConfig {
+	if cover == nil {
+		return nil
+	}
+
+	return &CoverConfig{
+		Mode:    cover.Mode,
+		PhotoID: cover.PhotoID,
+		Text:    cover.Text,
+	}
 }

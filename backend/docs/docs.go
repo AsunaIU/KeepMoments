@@ -702,9 +702,48 @@ const docTemplate = `{
                 }
             }
         },
+        "keepmoments_backend_internal_logic.CoverConfig": {
+            "type": "object",
+            "properties": {
+                "mode": {
+                    "type": "string",
+                    "enum": [
+                        "caption",
+                        "photo"
+                    ]
+                },
+                "photo_id": {
+                    "type": "string"
+                },
+                "text": {
+                    "type": "string"
+                }
+            }
+        },
+        "keepmoments_backend_internal_logic.FilledCover": {
+            "type": "object",
+            "properties": {
+                "mode": {
+                    "type": "string",
+                    "enum": [
+                        "caption",
+                        "photo"
+                    ]
+                },
+                "photo_id": {
+                    "type": "string"
+                },
+                "text": {
+                    "type": "string"
+                }
+            }
+        },
         "keepmoments_backend_internal_logic.FilledPage": {
             "type": "object",
             "properties": {
+                "caption": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },
@@ -730,6 +769,12 @@ const docTemplate = `{
         "keepmoments_backend_internal_logic.FilledTemplate": {
             "type": "object",
             "properties": {
+                "back_cover": {
+                    "$ref": "#/definitions/keepmoments_backend_internal_logic.FilledCover"
+                },
+                "front_cover": {
+                    "$ref": "#/definitions/keepmoments_backend_internal_logic.FilledCover"
+                },
                 "id": {
                     "type": "string"
                 },
@@ -832,12 +877,25 @@ const docTemplate = `{
                 },
                 "photo_id": {
                     "type": "string"
+                },
+                "required_orientation": {
+                    "type": "string",
+                    "enum": [
+                        "portrait",
+                        "landscape"
+                    ]
                 }
             }
         },
         "keepmoments_backend_internal_logic.ProcessTemplate": {
             "type": "object",
             "properties": {
+                "back_cover": {
+                    "$ref": "#/definitions/keepmoments_backend_internal_logic.CoverConfig"
+                },
+                "front_cover": {
+                    "$ref": "#/definitions/keepmoments_backend_internal_logic.CoverConfig"
+                },
                 "id": {
                     "type": "string"
                 },

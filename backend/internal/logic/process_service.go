@@ -52,8 +52,10 @@ type mlProcessRequest struct {
 }
 
 type ProcessTemplate struct {
-	ID    string        `json:"id"`
-	Pages []ProcessPage `json:"pages"`
+	ID         string        `json:"id"`
+	Pages      []ProcessPage `json:"pages"`
+	FrontCover *CoverConfig  `json:"front_cover,omitempty"`
+	BackCover  *CoverConfig  `json:"back_cover,omitempty"`
 }
 
 type ProcessPage struct {
@@ -62,8 +64,15 @@ type ProcessPage struct {
 }
 
 type ProcessSlot struct {
-	ID      string  `json:"id"`
+	ID                  string  `json:"id"`
+	PhotoID             *string `json:"photo_id,omitempty"`
+	RequiredOrientation *string `json:"required_orientation,omitempty" enums:"portrait,landscape"`
+}
+
+type CoverConfig struct {
+	Mode    string  `json:"mode" enums:"caption,photo"`
 	PhotoID *string `json:"photo_id,omitempty"`
+	Text    *string `json:"text,omitempty"`
 }
 
 type ProcessResponse struct {
@@ -71,18 +80,27 @@ type ProcessResponse struct {
 }
 
 type FilledTemplate struct {
-	ID    string       `json:"id"`
-	Pages []FilledPage `json:"pages"`
+	ID         string       `json:"id"`
+	Pages      []FilledPage `json:"pages"`
+	FrontCover *FilledCover `json:"front_cover,omitempty"`
+	BackCover  *FilledCover `json:"back_cover,omitempty"`
 }
 
 type FilledPage struct {
-	ID    string       `json:"id"`
-	Slots []FilledSlot `json:"slots"`
+	ID      string       `json:"id"`
+	Slots   []FilledSlot `json:"slots"`
+	Caption *string      `json:"caption,omitempty"`
 }
 
 type FilledSlot struct {
 	ID      string  `json:"id"`
 	PhotoID *string `json:"photo_id,omitempty"`
+}
+
+type FilledCover struct {
+	Mode    string  `json:"mode" enums:"caption,photo"`
+	PhotoID *string `json:"photo_id,omitempty"`
+	Text    *string `json:"text,omitempty"`
 }
 
 type ValidationError struct {
@@ -174,6 +192,15 @@ func ValidateTemplate(template ProcessTemplate) *HTTPValidationError {
 	return &HTTPValidationError{Detail: details}
 }
 
+func NormalizeTemplate(template *ProcessTemplate) {
+	if template.FrontCover != nil && template.FrontCover.Mode == "" {
+		template.FrontCover.Mode = "caption"
+	}
+	if template.BackCover != nil && template.BackCover.Mode == "" {
+		template.BackCover.Mode = "caption"
+	}
+}
+
 func validateResolvedProcessRequest(req ResolvedProcessRequest) *HTTPValidationError {
 	var details []ValidationError
 
@@ -234,10 +261,46 @@ func validateTemplate(template ProcessTemplate, pathPrefix []any) []ValidationEr
 			if slot.ID == "" {
 				details = append(details, validationError(appendPath(pathPrefix, "pages", pageIndex, "slots", slotIndex, "id"), "slot id is required", "value_error"))
 			}
+
+			if slot.RequiredOrientation != nil && !isAllowedOrientation(*slot.RequiredOrientation) {
+				details = append(details, validationError(
+					appendPath(pathPrefix, "pages", pageIndex, "slots", slotIndex, "required_orientation"),
+					"required_orientation must be portrait or landscape",
+					"value_error",
+				))
+			}
 		}
 	}
 
+	if template.FrontCover != nil {
+		details = append(details, validateCover(*template.FrontCover, appendPath(pathPrefix, "front_cover"))...)
+	}
+
+	if template.BackCover != nil {
+		details = append(details, validateCover(*template.BackCover, appendPath(pathPrefix, "back_cover"))...)
+	}
+
 	return details
+}
+
+func validateCover(cover CoverConfig, pathPrefix []any) []ValidationError {
+	if cover.Mode == "" {
+		return []ValidationError{
+			validationError(appendPath(pathPrefix, "mode"), "cover mode is required", "value_error"),
+		}
+	}
+
+	if cover.Mode != "caption" && cover.Mode != "photo" {
+		return []ValidationError{
+			validationError(appendPath(pathPrefix, "mode"), "cover mode must be caption or photo", "value_error"),
+		}
+	}
+
+	return nil
+}
+
+func isAllowedOrientation(value string) bool {
+	return value == "portrait" || value == "landscape"
 }
 
 func appendPath(prefix []any, values ...any) []any {

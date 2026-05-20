@@ -44,8 +44,34 @@ definitions:
       user_id:
         type: integer
     type: object
+  keepmoments_backend_internal_logic.CoverConfig:
+    properties:
+      mode:
+        enum:
+        - caption
+        - photo
+        type: string
+      photo_id:
+        type: string
+      text:
+        type: string
+    type: object
+  keepmoments_backend_internal_logic.FilledCover:
+    properties:
+      mode:
+        enum:
+        - caption
+        - photo
+        type: string
+      photo_id:
+        type: string
+      text:
+        type: string
+    type: object
   keepmoments_backend_internal_logic.FilledPage:
     properties:
+      caption:
+        type: string
       id:
         type: string
       slots:
@@ -62,6 +88,10 @@ definitions:
     type: object
   keepmoments_backend_internal_logic.FilledTemplate:
     properties:
+      back_cover:
+        $ref: '#/definitions/keepmoments_backend_internal_logic.FilledCover'
+      front_cover:
+        $ref: '#/definitions/keepmoments_backend_internal_logic.FilledCover'
       id:
         type: string
       pages:
@@ -129,9 +159,18 @@ definitions:
         type: string
       photo_id:
         type: string
+      required_orientation:
+        enum:
+        - portrait
+        - landscape
+        type: string
     type: object
   keepmoments_backend_internal_logic.ProcessTemplate:
     properties:
+      back_cover:
+        $ref: '#/definitions/keepmoments_backend_internal_logic.CoverConfig'
+      front_cover:
+        $ref: '#/definitions/keepmoments_backend_internal_logic.CoverConfig'
       id:
         type: string
       pages:
