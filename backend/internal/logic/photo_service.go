@@ -53,6 +53,12 @@ type PhotoDetails struct {
 	CreatedAt       time.Time       `json:"created_at"`
 }
 
+type PhotoFile struct {
+	FileName    string
+	ContentType string
+	Bytes       []byte
+}
+
 func (s *PhotoService) Create(ctx context.Context, input CreatePhotoInput) (PhotoDetails, error) {
 	extension := filepath.Ext(input.FileName)
 	objectKey := fmt.Sprintf("photos/%d%s", time.Now().UnixNano(), extension)
@@ -83,6 +89,25 @@ func (s *PhotoService) Get(ctx context.Context, id int64) (PhotoDetails, error) 
 	}
 
 	return mapPhoto(photo), nil
+}
+
+func (s *PhotoService) GetFile(ctx context.Context, id int64) (PhotoFile, error) {
+	photo, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return PhotoFile{}, err
+	}
+
+	payload, err := s.storage.GetObject(ctx, photo.ObjectKey)
+	if err != nil {
+		return PhotoFile{}, err
+	}
+
+	details := mapPhoto(photo)
+	return PhotoFile{
+		FileName:    details.FileName,
+		ContentType: details.ContentType,
+		Bytes:       payload,
+	}, nil
 }
 
 func (s *PhotoService) Delete(ctx context.Context, id int64) error {

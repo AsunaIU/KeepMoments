@@ -407,6 +407,45 @@ paths:
       summary: Get photo metadata
       tags:
       - photos
+  /api/v1/photos/{id}/file:
+    get:
+      parameters:
+      - description: Photo ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - image/jpeg
+      - image/png
+      - image/webp
+      - application/octet-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_presentation_http.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get photo file
+      tags:
+      - photos
   /api/v1/templates:
     get:
       produces:

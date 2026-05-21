@@ -6,7 +6,9 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"mime"
 	"net/http"
+	"path"
 	"strconv"
 	"strings"
 
@@ -477,6 +479,43 @@ func (h *Handler) GetPhoto(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, photo)
+}
+
+// GetPhotoFile godoc
+// @Summary Get photo file
+// @Tags photos
+// @Produce image/jpeg image/png image/webp application/octet-stream
+// @Security BearerAuth
+// @Param id path int true "Photo ID"
+// @Success 200 {file} file
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /api/v1/photos/{id}/file [get]
+func (h *Handler) GetPhotoFile(w http.ResponseWriter, r *http.Request) {
+	id, err := parseInt64Path(r, "id")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid photo id")
+		return
+	}
+
+	photo, err := h.photoService.GetFile(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, repository.ErrPhotoNotFound) {
+			writeError(w, http.StatusNotFound, "photo not found")
+			return
+		}
+
+		h.logger.Error("get photo file failed", "error", err, "photo_id", id)
+		writeError(w, http.StatusInternalServerError, "failed to get photo file")
+		return
+	}
+
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("inline", map[string]string{
+		"filename": path.Base(photo.FileName),
+	}))
+	writeRaw(w, http.StatusOK, photo.ContentType, photo.Bytes)
 }
 
 // DeletePhoto godoc

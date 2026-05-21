@@ -27,6 +27,7 @@ func NewRouter(handler *Handler) http.Handler {
 	mux.Handle("DELETE /api/v1/templates/{id}", handler.AuthMiddleware(http.HandlerFunc(handler.DeleteTemplate)))
 	mux.Handle("POST /api/v1/photos", handler.AuthMiddleware(http.HandlerFunc(handler.CreatePhoto)))
 	mux.Handle("GET /api/v1/photos/{id}", handler.AuthMiddleware(http.HandlerFunc(handler.GetPhoto)))
+	mux.Handle("GET /api/v1/photos/{id}/file", handler.AuthMiddleware(http.HandlerFunc(handler.GetPhotoFile)))
 	mux.Handle("DELETE /api/v1/photos/{id}", handler.AuthMiddleware(http.HandlerFunc(handler.DeletePhoto)))
 
 	return mux
