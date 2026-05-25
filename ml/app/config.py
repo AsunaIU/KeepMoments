@@ -12,6 +12,7 @@ class Settings(BaseSettings):
 
     BACKEND_BASE_URL: str | None = None
     BACKEND_TIMEOUT: float = 30.0
+    BACKEND_AUTH_TOKEN: str | None = None  # fallback when /process request has no Bearer token
 
     AWS_ACCESS_KEY_ID: str | None = None
     AWS_SECRET_ACCESS_KEY: str | None = None

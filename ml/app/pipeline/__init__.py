@@ -52,12 +52,13 @@ async def _fetch_photo_bytes(
 ) -> dict[str, bytes]:
     """Dispatch to the configured photo source and return raw bytes per photo_id."""
     if settings.PHOTO_SOURCE == "backend":
+        effective_token = auth_token or settings.BACKEND_AUTH_TOKEN
         return await download_photos_from_backend(
             request.photo_ids,
             settings.BACKEND_BASE_URL,
             client=http_client,
             timeout=settings.BACKEND_TIMEOUT,
-            auth_token=auth_token,
+            auth_token=effective_token,
         )
 
     loop = asyncio.get_event_loop()
