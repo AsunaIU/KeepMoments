@@ -28,7 +28,7 @@ async def download_photos_from_backend(
     base = base_url.rstrip("/")
 
     async def fetch(pid: str) -> tuple[str, bytes | None]:
-        url = f"{base}/api/v1/photos/{pid}/file/"
+        url = f"{base}/api/v1/photos/{pid}/file"
         try:
             resp = await client.get(url, timeout=timeout)
             resp.raise_for_status()

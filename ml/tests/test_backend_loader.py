@@ -20,10 +20,10 @@ def _make_mock_client(
     def handler(request: httpx.Request) -> httpx.Response:
         if captured is not None:
             captured.append(request)
-        # URL form: {base}/api/v1/photos/{id}/file/
+        # URL form: {base}/api/v1/photos/{id}/file
         path = request.url.path
         prefix = "/api/v1/photos/"
-        suffix = "/file/"
+        suffix = "/file"
         assert path.startswith(prefix) and path.endswith(suffix), (
             f"unexpected path: {path}"
         )
@@ -147,7 +147,7 @@ async def test_correct_url_is_used():
     finally:
         await client.aclose()
     assert len(captured) == 1
-    assert str(captured[0].url) == f"{_BASE_URL}/api/v1/photos/abc-123/file/"
+    assert str(captured[0].url) == f"{_BASE_URL}/api/v1/photos/abc-123/file"
     assert captured[0].method == "GET"
 
 
@@ -161,7 +161,7 @@ async def test_trailing_slash_in_base_url_is_handled():
         )
     finally:
         await client.aclose()
-    assert str(captured[0].url) == f"{_BASE_URL}/api/v1/photos/p1/file/"
+    assert str(captured[0].url) == f"{_BASE_URL}/api/v1/photos/p1/file"
 
 
 # ---------------------------------------------------------------------------
