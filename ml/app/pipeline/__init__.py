@@ -9,6 +9,7 @@ from fastapi import HTTPException
 
 from app.config import Settings
 from app.schemas import FilledTemplate, ProcessRequest
+from app.pipeline.backend_loader import download_photos_from_backend
 from app.pipeline.caption_generator import _OPENROUTER_BASE_URL, generate_captions
 from app.pipeline.clustering import cluster_photos
 from app.pipeline.cover_filler import fill_covers
@@ -41,6 +42,33 @@ def _resolve_caption_backend(settings: Settings) -> tuple[str | None, str | None
     return None, None, None
 
 
+async def _fetch_photo_bytes(
+    request: ProcessRequest,
+    settings: Settings,
+    s3_client,
+    http_client: Any | None,
+    download_executor,
+) -> dict[str, bytes]:
+    """Dispatch to the configured photo source and return raw bytes per photo_id."""
+    if settings.PHOTO_SOURCE == "backend":
+        return await download_photos_from_backend(
+            request.photo_ids,
+            settings.BACKEND_BASE_URL,
+            client=http_client,
+            timeout=settings.BACKEND_TIMEOUT,
+        )
+
+    loop = asyncio.get_event_loop()
+    fn = partial(
+        download_photos,
+        request.photo_ids,
+        settings.S3_BUCKET_NAME,
+        s3_client,
+        executor=download_executor,
+    )
+    return await loop.run_in_executor(None, fn)
+
+
 async def run_pipeline(
     request: ProcessRequest,
     settings: Settings,
@@ -48,12 +76,16 @@ async def run_pipeline(
     clip_model,
     clip_preprocess,
     download_executor=None,
+    http_client: Any | None = None,
 ) -> FilledTemplate:
+    photo_bytes = await _fetch_photo_bytes(
+        request, settings, s3_client, http_client, download_executor,
+    )
+
     loop = asyncio.get_event_loop()
     fn = partial(
         _run_pipeline_sync,
-        request, settings, s3_client, clip_model, clip_preprocess,
-        download_executor,
+        request, settings, photo_bytes, clip_model, clip_preprocess,
     )
     state = await loop.run_in_executor(None, fn)
 
@@ -89,24 +121,17 @@ async def run_pipeline(
 def _run_pipeline_sync(
     request: ProcessRequest,
     settings: Settings,
-    s3_client,
+    photo_bytes: dict[str, bytes],
     clip_model,
     clip_preprocess,
-    download_executor=None,
 ) -> _PipelineState:
-    # 1. Download photos from S3
-    photo_bytes = download_photos(
-        request.photo_ids, settings.S3_BUCKET_NAME, s3_client,
-        executor=download_executor,
-    )
-
     # 1a. Decode each photo to PIL.Image once (Win 2 — single-pass decode)
     images = decode_images(photo_bytes)
     # Release encoded bytes — subsequent steps work on decoded images.
     photo_bytes.clear()
 
     if not images:
-        raise HTTPException(status_code=503, detail="No photos could be downloaded from S3")
+        raise HTTPException(status_code=503, detail="No photos could be downloaded")
 
     if len(images) < request.min_photos:
         raise HTTPException(

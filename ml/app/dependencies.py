@@ -1,4 +1,5 @@
 from concurrent.futures import Executor
+from typing import Any
 
 import boto3
 from botocore.config import Config
@@ -15,8 +16,12 @@ def get_s3_client(request: Request):
     return request.app.state.s3_client
 
 
-def get_download_executor(request: Request) -> Executor:
+def get_download_executor(request: Request) -> Executor | None:
     return request.app.state.download_executor
+
+
+def get_http_client(request: Request) -> Any:
+    return request.app.state.http_client
 
 
 def build_s3_client(settings: Settings):

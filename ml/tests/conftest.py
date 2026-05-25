@@ -117,9 +117,18 @@ def make_process_request(
 @pytest.fixture
 def mock_settings() -> Settings:
     return Settings(
+        PHOTO_SOURCE="s3",
         AWS_ACCESS_KEY_ID="test_key",
         AWS_SECRET_ACCESS_KEY="test_secret",
         S3_BUCKET_NAME="test-bucket",
+    )
+
+
+@pytest.fixture
+def mock_backend_settings() -> Settings:
+    return Settings(
+        PHOTO_SOURCE="backend",
+        BACKEND_BASE_URL="http://backend.test",
     )
 
 

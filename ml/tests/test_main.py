@@ -15,10 +15,16 @@ from tests.conftest import make_template
 # Fixtures
 # ---------------------------------------------------------------------------
 
-_SETTINGS = Settings(
+_S3_SETTINGS = Settings(
+    PHOTO_SOURCE="s3",
     AWS_ACCESS_KEY_ID="test_key",
     AWS_SECRET_ACCESS_KEY="test_secret",
     S3_BUCKET_NAME="test-bucket",
+)
+
+_BACKEND_SETTINGS = Settings(
+    PHOTO_SOURCE="backend",
+    BACKEND_BASE_URL="http://backend.test",
 )
 
 _FILLED = FilledTemplate(
@@ -41,9 +47,11 @@ _MOCK_CLIP = (MagicMock(), MagicMock())
 
 @pytest.fixture
 def client():
-    app.dependency_overrides[get_settings] = lambda: _SETTINGS
+    app.dependency_overrides[get_settings] = lambda: _S3_SETTINGS
     app.dependency_overrides[get_clip_model_dep] = lambda: _MOCK_CLIP
-    with patch("app.main.get_clip_model", return_value=_MOCK_CLIP):
+    with patch("app.main.get_settings", return_value=_S3_SETTINGS), \
+         patch("app.main.get_clip_model", return_value=_MOCK_CLIP), \
+         patch("app.main.boto3.client", return_value=MagicMock()):
         with TestClient(app) as c:
             yield c
     app.dependency_overrides.clear()
@@ -89,6 +97,15 @@ def test_process_response_contains_photo_ids(client):
     slots = resp.json()["filled_template"]["pages"][0]["slots"]
     assert slots[0]["photo_id"] == "p1"
     assert slots[1]["photo_id"] == "p2"
+
+
+def test_process_forwards_http_client_into_pipeline(client):
+    """The /process handler injects app.state.http_client into run_pipeline."""
+    with patch("app.main.run_pipeline", new_callable=AsyncMock, return_value=_FILLED) as mock_pipe:
+        client.post("/process", json=_valid_payload())
+    kwargs = mock_pipe.call_args.kwargs
+    assert "http_client" in kwargs
+    assert kwargs["http_client"] is app.state.http_client
 
 
 # ---------------------------------------------------------------------------
@@ -138,41 +155,83 @@ def test_process_pipeline_422_propagated(client):
 
 
 # ---------------------------------------------------------------------------
-# Lifespan singletons (Win 5)
+# Lifespan — S3 mode (Win 5)
 # ---------------------------------------------------------------------------
 
-def test_lifespan_creates_s3_client_and_executor_once():
-    """S3 client and download executor are created at startup and stored on app.state."""
+def test_lifespan_s3_mode_creates_client_and_executor_once():
+    """In S3 mode, boto3 client and download executor are created once on startup."""
     from concurrent.futures import ThreadPoolExecutor
 
-    app.dependency_overrides[get_settings] = lambda: _SETTINGS
+    app.dependency_overrides[get_settings] = lambda: _S3_SETTINGS
     fake_s3 = MagicMock(name="s3-client")
-    with patch("app.main.get_clip_model", return_value=_MOCK_CLIP), \
+    with patch("app.main.get_settings", return_value=_S3_SETTINGS), \
+         patch("app.main.get_clip_model", return_value=_MOCK_CLIP), \
          patch("app.main.boto3.client", return_value=fake_s3) as mock_boto3:
         with TestClient(app):
             assert app.state.s3_client is fake_s3
             assert isinstance(app.state.download_executor, ThreadPoolExecutor)
             assert app.state.clip_model is _MOCK_CLIP[0]
-        # boto3.client must only be called once (singleton)
+            assert app.state.http_client is not None
         assert mock_boto3.call_count == 1
     app.dependency_overrides.clear()
 
 
-def test_lifespan_shuts_down_executor_on_exit():
+def test_lifespan_s3_mode_shuts_down_executor_on_exit():
     """The download executor is shut down when the app exits."""
     from concurrent.futures import ThreadPoolExecutor
 
-    app.dependency_overrides[get_settings] = lambda: _SETTINGS
+    app.dependency_overrides[get_settings] = lambda: _S3_SETTINGS
     captured: dict = {}
-    with patch("app.main.get_clip_model", return_value=_MOCK_CLIP), \
+    with patch("app.main.get_settings", return_value=_S3_SETTINGS), \
+         patch("app.main.get_clip_model", return_value=_MOCK_CLIP), \
          patch("app.main.boto3.client", return_value=MagicMock()):
         with TestClient(app):
             captured["executor"] = app.state.download_executor
             assert isinstance(captured["executor"], ThreadPoolExecutor)
 
-    # After exit, the executor's internal flag should be set to shutdown.
-    # We check by attempting to submit a new task — should raise RuntimeError.
     import pytest
     with pytest.raises(RuntimeError):
         captured["executor"].submit(lambda: 1)
+    app.dependency_overrides.clear()
+
+
+# ---------------------------------------------------------------------------
+# Lifespan — backend mode
+# ---------------------------------------------------------------------------
+
+def test_lifespan_backend_mode_skips_s3_client_and_executor():
+    """In backend mode, no boto3 client or download executor is created."""
+    app.dependency_overrides[get_settings] = lambda: _BACKEND_SETTINGS
+    with patch("app.main.get_settings", return_value=_BACKEND_SETTINGS), \
+         patch("app.main.get_clip_model", return_value=_MOCK_CLIP), \
+         patch("app.main.boto3.client") as mock_boto3:
+        with TestClient(app):
+            assert app.state.s3_client is None
+            assert app.state.download_executor is None
+            assert app.state.http_client is not None
+        mock_boto3.assert_not_called()
+    app.dependency_overrides.clear()
+
+
+def test_lifespan_creates_http_client_in_both_modes():
+    """http_client is always created (used for caption gen too) regardless of source."""
+    for settings in (_S3_SETTINGS, _BACKEND_SETTINGS):
+        app.dependency_overrides[get_settings] = lambda s=settings: s
+        with patch("app.main.get_settings", return_value=settings), \
+             patch("app.main.get_clip_model", return_value=_MOCK_CLIP), \
+             patch("app.main.boto3.client", return_value=MagicMock()):
+            with TestClient(app):
+                assert app.state.http_client is not None
+        app.dependency_overrides.clear()
+
+
+def test_lifespan_closes_http_client_on_exit():
+    """The async http_client is closed when the app shuts down."""
+    app.dependency_overrides[get_settings] = lambda: _BACKEND_SETTINGS
+    captured: dict = {}
+    with patch("app.main.get_settings", return_value=_BACKEND_SETTINGS), \
+         patch("app.main.get_clip_model", return_value=_MOCK_CLIP):
+        with TestClient(app):
+            captured["http_client"] = app.state.http_client
+    assert captured["http_client"].is_closed
     app.dependency_overrides.clear()
