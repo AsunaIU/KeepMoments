@@ -108,6 +108,33 @@ def test_process_forwards_http_client_into_pipeline(client):
     assert kwargs["http_client"] is app.state.http_client
 
 
+def test_process_forwards_bearer_token_into_pipeline(client):
+    """A Bearer token in the Authorization header is forwarded to run_pipeline."""
+    with patch("app.main.run_pipeline", new_callable=AsyncMock, return_value=_FILLED) as mock_pipe:
+        client.post(
+            "/process",
+            json=_valid_payload(),
+            headers={"Authorization": "Bearer user-token-xyz"},
+        )
+    assert mock_pipe.call_args.kwargs["auth_token"] == "user-token-xyz"
+
+
+def test_process_auth_token_is_none_without_authorization_header(client):
+    with patch("app.main.run_pipeline", new_callable=AsyncMock, return_value=_FILLED) as mock_pipe:
+        client.post("/process", json=_valid_payload())
+    assert mock_pipe.call_args.kwargs["auth_token"] is None
+
+
+def test_process_auth_token_is_none_for_non_bearer_scheme(client):
+    with patch("app.main.run_pipeline", new_callable=AsyncMock, return_value=_FILLED) as mock_pipe:
+        client.post(
+            "/process",
+            json=_valid_payload(),
+            headers={"Authorization": "Basic dXNlcjpwYXNz"},
+        )
+    assert mock_pipe.call_args.kwargs["auth_token"] is None
+
+
 # ---------------------------------------------------------------------------
 # POST /process — validation errors
 # ---------------------------------------------------------------------------

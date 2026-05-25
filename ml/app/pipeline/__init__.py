@@ -48,6 +48,7 @@ async def _fetch_photo_bytes(
     s3_client,
     http_client: Any | None,
     download_executor,
+    auth_token: str | None = None,
 ) -> dict[str, bytes]:
     """Dispatch to the configured photo source and return raw bytes per photo_id."""
     if settings.PHOTO_SOURCE == "backend":
@@ -56,6 +57,7 @@ async def _fetch_photo_bytes(
             settings.BACKEND_BASE_URL,
             client=http_client,
             timeout=settings.BACKEND_TIMEOUT,
+            auth_token=auth_token,
         )
 
     loop = asyncio.get_event_loop()
@@ -77,9 +79,11 @@ async def run_pipeline(
     clip_preprocess,
     download_executor=None,
     http_client: Any | None = None,
+    auth_token: str | None = None,
 ) -> FilledTemplate:
     photo_bytes = await _fetch_photo_bytes(
         request, settings, s3_client, http_client, download_executor,
+        auth_token=auth_token,
     )
 
     loop = asyncio.get_event_loop()

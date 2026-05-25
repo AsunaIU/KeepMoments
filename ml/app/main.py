@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 import boto3
 import httpx
 from botocore.config import Config
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Header
 
 from app.config import Settings, get_settings
 from app.dependencies import (
@@ -19,6 +19,15 @@ from app.pipeline.embeddings import get_clip_model
 from app.schemas import ProcessRequest, ProcessResponse
 
 _DOWNLOAD_POOL_SIZE = 16
+
+
+def _extract_bearer_token(authorization: str | None = Header(default=None)) -> str | None:
+    if not authorization:
+        return None
+    scheme, _, token = authorization.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        return None
+    return token
 
 
 def _configure_logging(level: str) -> None:
@@ -72,12 +81,14 @@ async def process(
     clip=Depends(get_clip_model_dep),
     download_executor=Depends(get_download_executor),
     http_client=Depends(get_http_client),
+    auth_token: str | None = Depends(_extract_bearer_token),
 ) -> ProcessResponse:
     clip_model, clip_preprocess = clip
     filled = await run_pipeline(
         request, settings, s3_client, clip_model, clip_preprocess,
         download_executor=download_executor,
         http_client=http_client,
+        auth_token=auth_token,
     )
     return ProcessResponse(filled_template=filled)
 

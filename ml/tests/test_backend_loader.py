@@ -185,6 +185,37 @@ async def test_uses_provided_client_without_closing_it():
         await client.aclose()
 
 
+# ---------------------------------------------------------------------------
+# Bearer token
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_bearer_token_sent_as_authorization_header():
+    captured: list[httpx.Request] = []
+    client = _make_mock_client({"p1": b"x", "p2": b"y"}, captured=captured)
+    try:
+        result = await download_photos_from_backend(
+            ["p1", "p2"], _BASE_URL, client=client, auth_token="secret-token"
+        )
+    finally:
+        await client.aclose()
+    assert result == {"p1": b"x", "p2": b"y"}
+    assert len(captured) == 2
+    for req in captured:
+        assert req.headers.get("authorization") == "Bearer secret-token"
+
+
+@pytest.mark.asyncio
+async def test_no_authorization_header_without_token():
+    captured: list[httpx.Request] = []
+    client = _make_mock_client({"p1": b"x"}, captured=captured)
+    try:
+        await download_photos_from_backend(["p1"], _BASE_URL, client=client)
+    finally:
+        await client.aclose()
+    assert captured[0].headers.get("authorization") is None
+
+
 @pytest.mark.asyncio
 async def test_internal_client_is_closed_when_not_provided(monkeypatch):
     """When no client is passed, the internally created one is closed afterwards."""

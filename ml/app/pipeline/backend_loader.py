@@ -12,12 +12,14 @@ async def download_photos_from_backend(
     base_url: str,
     client: Any | None = None,
     timeout: float = _DEFAULT_TIMEOUT,
+    auth_token: str | None = None,
 ) -> dict[str, bytes]:
     """Fetch photos via GET {base_url}/api/v1/photos/{id}/file/ in parallel.
 
     Mirrors download_photos() semantics: per-photo failures are logged and skipped.
     If ``client`` (httpx.AsyncClient) is supplied, it is reused and not closed.
     Otherwise a temporary client is created and closed before returning.
+    If ``auth_token`` is supplied, it is sent as ``Authorization: Bearer <token>``.
     """
     import httpx  # lazy, matches caption_generator pattern
 
@@ -26,11 +28,12 @@ async def download_photos_from_backend(
         client = httpx.AsyncClient(timeout=timeout)
 
     base = base_url.rstrip("/")
+    headers = {"Authorization": f"Bearer {auth_token}"} if auth_token else None
 
     async def fetch(pid: str) -> tuple[str, bytes | None]:
         url = f"{base}/api/v1/photos/{pid}/file"
         try:
-            resp = await client.get(url, timeout=timeout)
+            resp = await client.get(url, timeout=timeout, headers=headers)
             resp.raise_for_status()
             return pid, resp.content
         except Exception as exc:
