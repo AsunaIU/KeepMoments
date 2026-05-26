@@ -1,3 +1,5 @@
+from unittest.mock import AsyncMock
+
 import httpx
 import pytest
 
@@ -8,19 +10,27 @@ _BASE_URL = "http://backend.test"
 
 
 def _make_mock_client(
-    responses: dict[str, bytes | int | Exception],
+    responses: dict[str, bytes | int | Exception | list],
     captured: list[httpx.Request] | None = None,
 ) -> httpx.AsyncClient:
     """Build an AsyncClient backed by MockTransport.
 
-    `responses` maps photo_id → bytes (200 OK), int (status code), or Exception (raised).
+    `responses` maps photo_id → one of:
+      - bytes  → single 200 OK with that body
+      - int    → single response with that status
+      - Exception → raised on every call
+      - list[...] → sequenced per-call results (each entry: bytes | int | Exception)
     `captured` (optional) appends every incoming request for URL/headers inspection.
     """
+
+    iterators: dict[str, object] = {}
+    for pid, val in responses.items():
+        if isinstance(val, list):
+            iterators[pid] = iter(val)
 
     def handler(request: httpx.Request) -> httpx.Response:
         if captured is not None:
             captured.append(request)
-        # URL form: {base}/api/v1/photos/{id}/file
         path = request.url.path
         prefix = "/api/v1/photos/"
         suffix = "/file"
@@ -28,7 +38,10 @@ def _make_mock_client(
             f"unexpected path: {path}"
         )
         photo_id = path[len(prefix) : -len(suffix)]
-        result = responses[photo_id]
+        if photo_id in iterators:
+            result = next(iterators[photo_id])
+        else:
+            result = responses[photo_id]
         if isinstance(result, Exception):
             raise result
         if isinstance(result, int):
@@ -36,6 +49,14 @@ def _make_mock_client(
         return httpx.Response(200, content=result)
 
     return httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+
+def _make_auth(token: str = "tok") -> AsyncMock:
+    """Mock BackendAuthClient stub: get_token returns `token`, invalidate is a no-op."""
+    auth = AsyncMock()
+    auth.get_token = AsyncMock(return_value=token)
+    auth.invalidate = AsyncMock()
+    return auth
 
 
 # ---------------------------------------------------------------------------
@@ -185,37 +206,6 @@ async def test_uses_provided_client_without_closing_it():
         await client.aclose()
 
 
-# ---------------------------------------------------------------------------
-# Bearer token
-# ---------------------------------------------------------------------------
-
-@pytest.mark.asyncio
-async def test_bearer_token_sent_as_authorization_header():
-    captured: list[httpx.Request] = []
-    client = _make_mock_client({"p1": b"x", "p2": b"y"}, captured=captured)
-    try:
-        result = await download_photos_from_backend(
-            ["p1", "p2"], _BASE_URL, client=client, auth_token="secret-token"
-        )
-    finally:
-        await client.aclose()
-    assert result == {"p1": b"x", "p2": b"y"}
-    assert len(captured) == 2
-    for req in captured:
-        assert req.headers.get("authorization") == "Bearer secret-token"
-
-
-@pytest.mark.asyncio
-async def test_no_authorization_header_without_token():
-    captured: list[httpx.Request] = []
-    client = _make_mock_client({"p1": b"x"}, captured=captured)
-    try:
-        await download_photos_from_backend(["p1"], _BASE_URL, client=client)
-    finally:
-        await client.aclose()
-    assert captured[0].headers.get("authorization") is None
-
-
 @pytest.mark.asyncio
 async def test_internal_client_is_closed_when_not_provided(monkeypatch):
     """When no client is passed, the internally created one is closed afterwards."""
@@ -236,3 +226,106 @@ async def test_internal_client_is_closed_when_not_provided(monkeypatch):
     assert result == {"p1": b"x"}
     assert len(created) == 1
     assert created[0].is_closed
+
+
+# ---------------------------------------------------------------------------
+# Auth client integration
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_uses_auth_client_token_in_authorization_header():
+    captured: list[httpx.Request] = []
+    client = _make_mock_client({"p1": b"x", "p2": b"y"}, captured=captured)
+    auth = _make_auth(token="service-token-42")
+    try:
+        result = await download_photos_from_backend(
+            ["p1", "p2"], _BASE_URL, client=client, auth=auth
+        )
+    finally:
+        await client.aclose()
+    assert result == {"p1": b"x", "p2": b"y"}
+    assert len(captured) == 2
+    for req in captured:
+        assert req.headers.get("authorization") == "Bearer service-token-42"
+    # One get_token per fetch (no caching in the loader — auth client handles it).
+    assert auth.get_token.await_count == 2
+    auth.invalidate.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_no_authorization_header_without_auth_client():
+    captured: list[httpx.Request] = []
+    client = _make_mock_client({"p1": b"x"}, captured=captured)
+    try:
+        await download_photos_from_backend(["p1"], _BASE_URL, client=client)
+    finally:
+        await client.aclose()
+    assert captured[0].headers.get("authorization") is None
+
+
+@pytest.mark.asyncio
+async def test_retries_once_on_401_with_fresh_token():
+    """On 401, invalidate the cached token, re-fetch, retry exactly once."""
+    captured: list[httpx.Request] = []
+    client = _make_mock_client({"p1": [401, b"recovered"]}, captured=captured)
+
+    auth = AsyncMock()
+    auth.get_token = AsyncMock(side_effect=["stale", "fresh"])
+    auth.invalidate = AsyncMock()
+
+    try:
+        result = await download_photos_from_backend(
+            ["p1"], _BASE_URL, client=client, auth=auth
+        )
+    finally:
+        await client.aclose()
+
+    assert result == {"p1": b"recovered"}
+    assert len(captured) == 2
+    assert captured[0].headers.get("authorization") == "Bearer stale"
+    assert captured[1].headers.get("authorization") == "Bearer fresh"
+    assert auth.invalidate.await_count == 1
+    assert auth.get_token.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_persistent_401_skips_photo():
+    """If even the retry returns 401, the photo is skipped (no infinite loop)."""
+    client = _make_mock_client({"p1": [401, 401]})
+
+    auth = AsyncMock()
+    auth.get_token = AsyncMock(side_effect=["t1", "t2"])
+    auth.invalidate = AsyncMock()
+
+    try:
+        result = await download_photos_from_backend(
+            ["p1"], _BASE_URL, client=client, auth=auth
+        )
+    finally:
+        await client.aclose()
+
+    assert result == {}
+    assert auth.invalidate.await_count == 1
+    assert auth.get_token.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_login_failure_skips_photo_without_blocking_others():
+    """If get_token raises, that photo is skipped; remaining photos still fetched."""
+    captured: list[httpx.Request] = []
+    client = _make_mock_client({"p1": b"ok", "p2": b"ok2"}, captured=captured)
+
+    auth = AsyncMock()
+    auth.get_token = AsyncMock(side_effect=RuntimeError("login broken"))
+    auth.invalidate = AsyncMock()
+
+    try:
+        result = await download_photos_from_backend(
+            ["p1", "p2"], _BASE_URL, client=client, auth=auth
+        )
+    finally:
+        await client.aclose()
+
+    # Login fails for every photo → all skipped, no HTTP requests sent
+    assert result == {}
+    assert captured == []

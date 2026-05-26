@@ -2,17 +2,16 @@ from functools import lru_cache
 from typing import Literal
 
 from pydantic import model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
-
     PHOTO_SOURCE: Literal["backend", "s3"] = "backend"
 
     BACKEND_BASE_URL: str | None = None
     BACKEND_TIMEOUT: float = 30.0
-    BACKEND_AUTH_TOKEN: str | None = None  # fallback when /process request has no Bearer token
+    BACKEND_EMAIL: str | None = None  # ML service login (POST /api/v1/auth/login)
+    BACKEND_PASSWORD: str | None = None
 
     AWS_ACCESS_KEY_ID: str | None = None
     AWS_SECRET_ACCESS_KEY: str | None = None
@@ -33,8 +32,17 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def _validate_photo_source(self) -> "Settings":
         if self.PHOTO_SOURCE == "backend":
-            if not self.BACKEND_BASE_URL:
-                raise ValueError("BACKEND_BASE_URL is required when PHOTO_SOURCE=backend")
+            missing = [
+                name for name, val in (
+                    ("BACKEND_BASE_URL", self.BACKEND_BASE_URL),
+                    ("BACKEND_EMAIL", self.BACKEND_EMAIL),
+                    ("BACKEND_PASSWORD", self.BACKEND_PASSWORD),
+                ) if not val
+            ]
+            if missing:
+                raise ValueError(
+                    f"PHOTO_SOURCE=backend requires {', '.join(missing)}"
+                )
         else:  # "s3"
             missing = [
                 name for name, val in (

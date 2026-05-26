@@ -6,6 +6,7 @@ from botocore.config import Config
 from fastapi import Request
 
 from app.config import Settings
+from app.pipeline.backend_auth import BackendAuthClient
 
 
 def get_clip_model_dep(request: Request):
@@ -22,6 +23,10 @@ def get_download_executor(request: Request) -> Executor | None:
 
 def get_http_client(request: Request) -> Any:
     return request.app.state.http_client
+
+
+def get_backend_auth(request: Request) -> BackendAuthClient | None:
+    return request.app.state.backend_auth
 
 
 def build_s3_client(settings: Settings):

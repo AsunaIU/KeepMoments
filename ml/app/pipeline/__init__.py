@@ -9,6 +9,7 @@ from fastapi import HTTPException
 
 from app.config import Settings
 from app.schemas import FilledTemplate, ProcessRequest
+from app.pipeline.backend_auth import BackendAuthClient
 from app.pipeline.backend_loader import download_photos_from_backend
 from app.pipeline.caption_generator import _OPENROUTER_BASE_URL, generate_captions
 from app.pipeline.clustering import cluster_photos
@@ -48,17 +49,16 @@ async def _fetch_photo_bytes(
     s3_client,
     http_client: Any | None,
     download_executor,
-    auth_token: str | None = None,
+    auth: BackendAuthClient | None = None,
 ) -> dict[str, bytes]:
     """Dispatch to the configured photo source and return raw bytes per photo_id."""
     if settings.PHOTO_SOURCE == "backend":
-        effective_token = auth_token or settings.BACKEND_AUTH_TOKEN
         return await download_photos_from_backend(
             request.photo_ids,
             settings.BACKEND_BASE_URL,
             client=http_client,
             timeout=settings.BACKEND_TIMEOUT,
-            auth_token=effective_token,
+            auth=auth,
         )
 
     loop = asyncio.get_event_loop()
@@ -80,11 +80,11 @@ async def run_pipeline(
     clip_preprocess,
     download_executor=None,
     http_client: Any | None = None,
-    auth_token: str | None = None,
+    auth: BackendAuthClient | None = None,
 ) -> FilledTemplate:
     photo_bytes = await _fetch_photo_bytes(
         request, settings, s3_client, http_client, download_executor,
-        auth_token=auth_token,
+        auth=auth,
     )
 
     loop = asyncio.get_event_loop()

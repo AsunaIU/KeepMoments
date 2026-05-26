@@ -129,6 +129,8 @@ def mock_backend_settings() -> Settings:
     return Settings(
         PHOTO_SOURCE="backend",
         BACKEND_BASE_URL="http://backend.test",
+        BACKEND_EMAIL="ml@test",
+        BACKEND_PASSWORD="secret",
     )
 
 

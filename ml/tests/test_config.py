@@ -4,8 +4,31 @@ from pydantic import ValidationError
 from app.config import Settings, get_settings
 
 
+_SETTINGS_ENV_VARS = (
+    "PHOTO_SOURCE",
+    "BACKEND_BASE_URL",
+    "BACKEND_TIMEOUT",
+    "BACKEND_EMAIL",
+    "BACKEND_PASSWORD",
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "AWS_REGION",
+    "S3_BUCKET_NAME",
+    "S3_ENDPOINT_URL",
+    "CLIP_MODEL_NAME",
+    "KMEANS_RANDOM_STATE",
+    "LOG_LEVEL",
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_MODEL",
+    "OPENROUTER_API_KEY",
+    "OPENROUTER_MODEL",
+)
+
+
 @pytest.fixture(autouse=True)
-def clear_cache():
+def isolate_env(monkeypatch):
+    for var in _SETTINGS_ENV_VARS:
+        monkeypatch.delenv(var, raising=False)
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()
@@ -29,7 +52,6 @@ def test_default_values():
         AWS_ACCESS_KEY_ID="k",
         AWS_SECRET_ACCESS_KEY="s",
         S3_BUCKET_NAME="b",
-        _env_file=None,
     )
     assert s.AWS_REGION == "us-east-1"
     assert s.CLIP_MODEL_NAME == "ViT-B/32"
@@ -81,7 +103,11 @@ def test_get_settings_returns_same_instance(monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_photo_source_defaults_to_backend():
-    s = Settings(BACKEND_BASE_URL="http://backend.test", _env_file=None)
+    s = Settings(
+        BACKEND_BASE_URL="http://backend.test",
+        BACKEND_EMAIL="ml@test",
+        BACKEND_PASSWORD="secret",
+    )
     assert s.PHOTO_SOURCE == "backend"
 
 
@@ -89,23 +115,51 @@ def test_backend_mode_happy_path():
     s = Settings(
         PHOTO_SOURCE="backend",
         BACKEND_BASE_URL="http://backend:8000",
+        BACKEND_EMAIL="ml@test",
+        BACKEND_PASSWORD="secret",
         BACKEND_TIMEOUT=15.0,
-        _env_file=None,
     )
     assert s.PHOTO_SOURCE == "backend"
     assert s.BACKEND_BASE_URL == "http://backend:8000"
+    assert s.BACKEND_EMAIL == "ml@test"
+    assert s.BACKEND_PASSWORD == "secret"
     assert s.BACKEND_TIMEOUT == 15.0
 
 
 def test_backend_mode_without_url_raises():
     with pytest.raises(ValidationError) as exc_info:
-        Settings(PHOTO_SOURCE="backend", _env_file=None)
+        Settings(
+            PHOTO_SOURCE="backend",
+            BACKEND_EMAIL="ml@test",
+            BACKEND_PASSWORD="secret",
+        )
     assert "BACKEND_BASE_URL" in str(exc_info.value)
+
+
+def test_backend_mode_without_credentials_raises():
+    with pytest.raises(ValidationError) as exc_info:
+        Settings(
+            PHOTO_SOURCE="backend",
+            BACKEND_BASE_URL="http://backend:8000",
+        )
+    msg = str(exc_info.value)
+    assert "BACKEND_EMAIL" in msg
+    assert "BACKEND_PASSWORD" in msg
+
+
+def test_backend_mode_with_partial_credentials_raises():
+    with pytest.raises(ValidationError) as exc_info:
+        Settings(
+            PHOTO_SOURCE="backend",
+            BACKEND_BASE_URL="http://backend:8000",
+            BACKEND_EMAIL="ml@test",
+        )
+    assert "BACKEND_PASSWORD" in str(exc_info.value)
 
 
 def test_s3_mode_without_credentials_raises():
     with pytest.raises(ValidationError) as exc_info:
-        Settings(PHOTO_SOURCE="s3", _env_file=None)
+        Settings(PHOTO_SOURCE="s3")
     msg = str(exc_info.value)
     assert "AWS_ACCESS_KEY_ID" in msg
     assert "AWS_SECRET_ACCESS_KEY" in msg
@@ -118,16 +172,19 @@ def test_s3_mode_with_partial_credentials_raises():
             PHOTO_SOURCE="s3",
             AWS_ACCESS_KEY_ID="k",
             AWS_SECRET_ACCESS_KEY="s",
-            _env_file=None,
         )
     assert "S3_BUCKET_NAME" in str(exc_info.value)
 
 
 def test_invalid_photo_source_raises():
     with pytest.raises(ValidationError):
-        Settings(PHOTO_SOURCE="ftp", _env_file=None)
+        Settings(PHOTO_SOURCE="ftp")
 
 
 def test_backend_timeout_defaults_to_30_seconds():
-    s = Settings(BACKEND_BASE_URL="http://b", _env_file=None)
+    s = Settings(
+        BACKEND_BASE_URL="http://b",
+        BACKEND_EMAIL="ml@test",
+        BACKEND_PASSWORD="secret",
+    )
     assert s.BACKEND_TIMEOUT == 30.0

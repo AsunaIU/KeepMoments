@@ -77,8 +77,10 @@ FastAPI-сервис для автоматического подбора и р�
 | Переменная | По умолчанию | Описание |
 |------------|--------------|----------|
 | `PHOTO_SOURCE` | `backend` | Источник фотографий: `backend` или `s3` |
-| `BACKEND_BASE_URL` | — | База URL бекенда (например, `http://backend:8000`). **Обязательна** при `PHOTO_SOURCE=backend`. Запросы идут на `{BACKEND_BASE_URL}/api/v1/photos/{id}/file/` |
-| `BACKEND_TIMEOUT` | `30.0` | Таймаут (сек) одного запроса к бекенду |
+| `BACKEND_BASE_URL` | — | База URL бекенда (например, `http://backend:8000`). **Обязательна** при `PHOTO_SOURCE=backend`. Запросы идут на `{BACKEND_BASE_URL}/api/v1/photos/{id}/file` |
+| `BACKEND_TIMEOUT` | `30.0` | Таймаут (сек) одного запроса к бекенду (включая логин) |
+| `BACKEND_EMAIL` | — | Email сервисной учётки ml для логина в бекенд (`POST /api/v1/auth/login`). **Обязателен** при `PHOTO_SOURCE=backend` |
+| `BACKEND_PASSWORD` | — | Пароль сервисной учётки ml. **Обязателен** при `PHOTO_SOURCE=backend` |
 | `AWS_ACCESS_KEY_ID` | — | AWS ключ доступа. **Обязателен** при `PHOTO_SOURCE=s3` |
 | `AWS_SECRET_ACCESS_KEY` | — | AWS секретный ключ. **Обязателен** при `PHOTO_SOURCE=s3` |
 | `AWS_REGION` | `us-east-1` | Регион AWS |
@@ -92,7 +94,36 @@ FastAPI-сервис для автоматического подбора и р�
 | `OPENROUTER_API_KEY` | — | Ключ OpenRouter; если задан, имеет приоритет над Anthropic |
 | `OPENROUTER_MODEL` | `google/gemini-flash-1.5` | Модель OpenRouter для генерации подписей |
 
-Pydantic-валидатор настроек проверяет согласованность при старте: `PHOTO_SOURCE=backend` требует `BACKEND_BASE_URL`, `PHOTO_SOURCE=s3` — все три S3-переменные. Невалидная конфигурация приводит к ошибке на старте приложения.
+Pydantic-валидатор настроек проверяет согласованность при старте: `PHOTO_SOURCE=backend` требует `BACKEND_BASE_URL`, `BACKEND_EMAIL` и `BACKEND_PASSWORD`; `PHOTO_SOURCE=s3` — все три S3-переменные. Невалидная конфигурация приводит к ошибке на старте приложения.
+
+---
+
+## Аутентификация в бекенде
+
+При `PHOTO_SOURCE=backend` ml-сервис аутентифицируется в бекенде как сервисный клиент: креды задаются через `BACKEND_EMAIL` / `BACKEND_PASSWORD` (env-переменные docker-контейнера). На `/process` эндпоинте `Authorization` хедер пользователя **не учитывается** — ml всегда ходит от имени своей учётки.
+
+**Поток:**
+
+1. `BackendAuthClient` создаётся в `lifespan` (только в backend-режиме), переиспользует общий `httpx.AsyncClient`.
+2. При первом обращении к бекенду — `POST {BACKEND_BASE_URL}/api/v1/auth/login` с `{"email", "password"}`. Полученный `access_token` кешируется в памяти процесса.
+3. Все запросы `GET /api/v1/photos/{id}/file` идут с заголовком `Authorization: Bearer <access_token>`.
+4. На ответ `401 Unauthorized` — кеш токена сбрасывается (`invalidate()`), выполняется повторный логин и **ровно один** retry того же запроса со свежим токеном. Стойкий 401 → фото пропускается (graceful degradation).
+5. `asyncio.Lock` гарантирует, что параллельные `get_token()` запускают логин только один раз.
+
+**Ожидаемые контракты бекенда:**
+
+```
+POST /api/v1/auth/login
+Content-Type: application/json
+{ "email": "<BACKEND_EMAIL>", "password": "<BACKEND_PASSWORD>" }
+
+→ 200 OK
+{ "access_token": "<jwt>", "token_type": "Bearer", "expires_in": 3600 }
+```
+
+Поля `token_type` и `expires_in` не используются — обновление токена происходит реактивно по 401.
+
+Ошибки логина (не-2xx, отсутствие/пустой `access_token`, сетевая ошибка) приводят к `RuntimeError` внутри `get_token()`; вызывающий код (загрузчик фото) ловит исключение и пропускает фото с warning-логом.
 
 ---
 
@@ -109,7 +140,7 @@ flowchart TD
     B --> C
 
     subgraph pipeline["🔄 Основной пайплайн"]
-        C["📥 Шаг 1: Загрузка фото\n━━━━━━━━━━━━━━━━━━━\n• Источник по PHOTO_SOURCE:\n   - backend → httpx.AsyncClient,\n     GET /api/v1/photos/{id}/file/\n     (asyncio.gather параллельно)\n   - s3 → boto3 + ThreadPoolExecutor\n• Вход: photo_ids\n• Выход: dict[photo_id → bytes]\n• Ошибки: пропуск с логированием"]
+        C["📥 Шаг 1: Загрузка фото\n━━━━━━━━━━━━━━━━━━━\n• Источник по PHOTO_SOURCE:\n   - backend → httpx.AsyncClient,\n     GET /api/v1/photos/{id}/file\n     с Authorization: Bearer <token>\n     (BackendAuthClient: lazy login,\n      кеш токена, retry-on-401)\n     asyncio.gather параллельно\n   - s3 → boto3 + ThreadPoolExecutor\n• Вход: photo_ids\n• Выход: dict[photo_id → bytes]\n• Ошибки: пропуск с логированием"]
 
         C --> ORI["📐 Шаг 1б: Определение ориентации\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n• PIL.Image → width / height\n• width ≥ height → landscape\n• width < height → portrait\n• Квадрат → landscape\n• Выход: dict[photo_id → Orientation]"]
 
@@ -191,6 +222,8 @@ Clustering           (Sharpness +          Re-ranking
 | Сценарий | Поведение |
 |----------|-----------|
 | Ошибка загрузки отдельного фото из бекенда (HTTP 4xx/5xx, сетевая ошибка, таймаут) | Лог-предупреждение, фото пропускается |
+| `401 Unauthorized` от бекенда на запрос фото | `invalidate()` кеша токена + перелогин + один retry; стойкий 401 → фото пропускается |
+| Ошибка логина в бекенд (не-2xx, отсутствие `access_token`, сетевая ошибка) | `RuntimeError` в `get_token()`, фото пропускается с warning-логом; токен в кеш не сохраняется (следующий запрос попробует залогиниться снова) |
 | Ошибка загрузки отдельного фото из S3 | Лог-предупреждение, фото пропускается |
 | Ошибка определения ориентации фото | Лог-предупреждение, фото пропускается из словаря ориентаций |
 | Нет фото подходящей ориентации для слота | Fallback: первое доступное фото |
@@ -213,11 +246,12 @@ ml/
 ├── app/
 │   ├── main.py              # FastAPI app, /process, /health, lifespan-инициализация клиентов
 │   ├── config.py            # Settings (pydantic-settings, lru_cache, валидатор PHOTO_SOURCE)
-│   ├── dependencies.py      # DI: s3_client, http_client, download_executor, clip_model
+│   ├── dependencies.py      # DI: s3_client, http_client, download_executor, clip_model, backend_auth
 │   ├── schemas.py           # ProcessRequest, ProcessResponse, Template models
 │   └── pipeline/
 │       ├── __init__.py      # run_pipeline: диспетчер источника + оркестрация шагов
-│       ├── backend_loader.py # Параллельная загрузка из бекенда (httpx.AsyncClient)
+│       ├── backend_auth.py  # BackendAuthClient: логин в бекенд, кеш access_token, retry-on-401
+│       ├── backend_loader.py # Параллельная загрузка из бекенда (httpx.AsyncClient + Bearer-токен)
 │       ├── s3_loader.py     # Параллельная загрузка из S3 (boto3 + ThreadPoolExecutor)
 │       ├── embeddings.py    # CLIP image encoder + кэш модели
 │       ├── clustering.py    # KMeans кластеризация

@@ -12,14 +12,16 @@ async def download_photos_from_backend(
     base_url: str,
     client: Any | None = None,
     timeout: float = _DEFAULT_TIMEOUT,
-    auth_token: str | None = None,
+    auth: Any | None = None,
 ) -> dict[str, bytes]:
-    """Fetch photos via GET {base_url}/api/v1/photos/{id}/file/ in parallel.
+    """Fetch photos via GET {base_url}/api/v1/photos/{id}/file in parallel.
 
-    Mirrors download_photos() semantics: per-photo failures are logged and skipped.
+    Per-photo failures are logged and skipped.
     If ``client`` (httpx.AsyncClient) is supplied, it is reused and not closed.
     Otherwise a temporary client is created and closed before returning.
-    If ``auth_token`` is supplied, it is sent as ``Authorization: Bearer <token>``.
+    If ``auth`` (BackendAuthClient) is supplied, its access token is sent as
+    ``Authorization: Bearer <token>``. On 401, the cached token is invalidated
+    and the request is retried exactly once with a fresh token.
     """
     import httpx  # lazy, matches caption_generator pattern
 
@@ -28,12 +30,16 @@ async def download_photos_from_backend(
         client = httpx.AsyncClient(timeout=timeout)
 
     base = base_url.rstrip("/")
-    headers = {"Authorization": f"Bearer {auth_token}"} if auth_token else None
 
     async def fetch(pid: str) -> tuple[str, bytes | None]:
         url = f"{base}/api/v1/photos/{pid}/file"
         try:
+            headers = await _auth_header(auth)
             resp = await client.get(url, timeout=timeout, headers=headers)
+            if resp.status_code == 401 and auth is not None:
+                await auth.invalidate()
+                headers = await _auth_header(auth)
+                resp = await client.get(url, timeout=timeout, headers=headers)
             resp.raise_for_status()
             return pid, resp.content
         except Exception as exc:
@@ -47,3 +53,10 @@ async def download_photos_from_backend(
             await client.aclose()
 
     return {pid: data for pid, data in results if data is not None}
+
+
+async def _auth_header(auth: Any | None) -> dict[str, str] | None:
+    if auth is None:
+        return None
+    token = await auth.get_token()
+    return {"Authorization": f"Bearer {token}"}

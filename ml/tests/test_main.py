@@ -25,6 +25,8 @@ _S3_SETTINGS = Settings(
 _BACKEND_SETTINGS = Settings(
     PHOTO_SOURCE="backend",
     BACKEND_BASE_URL="http://backend.test",
+    BACKEND_EMAIL="ml@test",
+    BACKEND_PASSWORD="secret",
 )
 
 _FILLED = FilledTemplate(
@@ -108,31 +110,26 @@ def test_process_forwards_http_client_into_pipeline(client):
     assert kwargs["http_client"] is app.state.http_client
 
 
-def test_process_forwards_bearer_token_into_pipeline(client):
-    """A Bearer token in the Authorization header is forwarded to run_pipeline."""
+def test_process_forwards_backend_auth_into_pipeline(client):
+    """The /process handler injects app.state.backend_auth into run_pipeline."""
+    with patch("app.main.run_pipeline", new_callable=AsyncMock, return_value=_FILLED) as mock_pipe:
+        client.post("/process", json=_valid_payload())
+    kwargs = mock_pipe.call_args.kwargs
+    assert "auth" in kwargs
+    # In S3 mode (fixture), backend_auth is None.
+    assert kwargs["auth"] is app.state.backend_auth
+
+
+def test_process_ignores_authorization_header(client):
+    """Authorization header on /process is no longer used — ML uses its own service token."""
     with patch("app.main.run_pipeline", new_callable=AsyncMock, return_value=_FILLED) as mock_pipe:
         client.post(
             "/process",
             json=_valid_payload(),
             headers={"Authorization": "Bearer user-token-xyz"},
         )
-    assert mock_pipe.call_args.kwargs["auth_token"] == "user-token-xyz"
-
-
-def test_process_auth_token_is_none_without_authorization_header(client):
-    with patch("app.main.run_pipeline", new_callable=AsyncMock, return_value=_FILLED) as mock_pipe:
-        client.post("/process", json=_valid_payload())
-    assert mock_pipe.call_args.kwargs["auth_token"] is None
-
-
-def test_process_auth_token_is_none_for_non_bearer_scheme(client):
-    with patch("app.main.run_pipeline", new_callable=AsyncMock, return_value=_FILLED) as mock_pipe:
-        client.post(
-            "/process",
-            json=_valid_payload(),
-            headers={"Authorization": "Basic dXNlcjpwYXNz"},
-        )
-    assert mock_pipe.call_args.kwargs["auth_token"] is None
+    # No auth_token kwarg should be passed anymore
+    assert "auth_token" not in mock_pipe.call_args.kwargs
 
 
 # ---------------------------------------------------------------------------
@@ -199,6 +196,8 @@ def test_lifespan_s3_mode_creates_client_and_executor_once():
             assert isinstance(app.state.download_executor, ThreadPoolExecutor)
             assert app.state.clip_model is _MOCK_CLIP[0]
             assert app.state.http_client is not None
+            # S3 mode does NOT create a backend auth client
+            assert app.state.backend_auth is None
         assert mock_boto3.call_count == 1
     app.dependency_overrides.clear()
 
@@ -237,6 +236,18 @@ def test_lifespan_backend_mode_skips_s3_client_and_executor():
             assert app.state.download_executor is None
             assert app.state.http_client is not None
         mock_boto3.assert_not_called()
+    app.dependency_overrides.clear()
+
+
+def test_lifespan_backend_mode_creates_backend_auth_client():
+    """In backend mode, lifespan constructs a BackendAuthClient on app.state."""
+    from app.pipeline.backend_auth import BackendAuthClient
+
+    app.dependency_overrides[get_settings] = lambda: _BACKEND_SETTINGS
+    with patch("app.main.get_settings", return_value=_BACKEND_SETTINGS), \
+         patch("app.main.get_clip_model", return_value=_MOCK_CLIP):
+        with TestClient(app):
+            assert isinstance(app.state.backend_auth, BackendAuthClient)
     app.dependency_overrides.clear()
 
 

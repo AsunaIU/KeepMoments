@@ -20,12 +20,13 @@ _EMBEDDINGS = {k: np.zeros(512, dtype=np.float32) for k in _IMAGES}
 _FILLED = FilledTemplate(id="template_1", pages=[FilledPage(id="page_0", slots=[])])
 
 
-def _make_settings(photo_source: str = "s3", backend_auth_token: str | None = None):
+def _make_settings(photo_source: str = "s3"):
     return MagicMock(
         PHOTO_SOURCE=photo_source,
         BACKEND_BASE_URL="http://backend.test",
         BACKEND_TIMEOUT=30.0,
-        BACKEND_AUTH_TOKEN=backend_auth_token,
+        BACKEND_EMAIL="ml@test",
+        BACKEND_PASSWORD="secret",
         AWS_REGION="us-east-1",
         AWS_ACCESS_KEY_ID="k",
         AWS_SECRET_ACCESS_KEY="s",
@@ -224,6 +225,7 @@ async def test_fetch_dispatches_to_backend_when_photo_source_backend():
     settings = _make_settings(photo_source="backend")
     request = make_process_request(photo_ids=["a", "b"])
     fake_http = MagicMock(name="http-client")
+    fake_auth = MagicMock(name="backend-auth")
 
     with patch(
         "app.pipeline.download_photos_from_backend",
@@ -232,7 +234,8 @@ async def test_fetch_dispatches_to_backend_when_photo_source_backend():
     ) as mock_backend, \
          patch("app.pipeline.download_photos") as mock_s3:
         result = await _fetch_photo_bytes(
-            request, settings, s3_client=None, http_client=fake_http, download_executor=None
+            request, settings, s3_client=None, http_client=fake_http,
+            download_executor=None, auth=fake_auth,
         )
 
     assert result == {"a": b"A", "b": b"B"}
@@ -240,45 +243,8 @@ async def test_fetch_dispatches_to_backend_when_photo_source_backend():
     kwargs = mock_backend.call_args.kwargs
     assert kwargs["client"] is fake_http
     assert kwargs["timeout"] == settings.BACKEND_TIMEOUT
+    assert kwargs["auth"] is fake_auth
     mock_s3.assert_not_called()
-
-
-async def test_fetch_falls_back_to_settings_token_when_request_has_none():
-    from app.pipeline import _fetch_photo_bytes
-
-    settings = _make_settings(photo_source="backend", backend_auth_token="env-fallback")
-    request = make_process_request(photo_ids=["a"])
-
-    with patch(
-        "app.pipeline.download_photos_from_backend",
-        new_callable=AsyncMock,
-        return_value={"a": b"A"},
-    ) as mock_backend:
-        await _fetch_photo_bytes(
-            request, settings, s3_client=None, http_client=MagicMock(), download_executor=None,
-            auth_token=None,
-        )
-
-    assert mock_backend.call_args.kwargs["auth_token"] == "env-fallback"
-
-
-async def test_fetch_prefers_request_token_over_settings_fallback():
-    from app.pipeline import _fetch_photo_bytes
-
-    settings = _make_settings(photo_source="backend", backend_auth_token="env-fallback")
-    request = make_process_request(photo_ids=["a"])
-
-    with patch(
-        "app.pipeline.download_photos_from_backend",
-        new_callable=AsyncMock,
-        return_value={"a": b"A"},
-    ) as mock_backend:
-        await _fetch_photo_bytes(
-            request, settings, s3_client=None, http_client=MagicMock(), download_executor=None,
-            auth_token="request-token",
-        )
-
-    assert mock_backend.call_args.kwargs["auth_token"] == "request-token"
 
 
 async def test_fetch_dispatches_to_s3_when_photo_source_s3():
