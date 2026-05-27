@@ -43,6 +43,10 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.myapplication.ui.theme.KeepMomentsTheme
+import com.example.myapplication.ui.theme.appAuthBackground
+import com.example.myapplication.ui.theme.appBorder
+import com.example.myapplication.ui.theme.appSurface
+import com.example.myapplication.ui.theme.appTextSecondary
 import com.example.myapplication.viewmodel.AuthMode
 import com.example.myapplication.viewmodel.AuthUiState
 
@@ -67,7 +71,7 @@ fun AuthScreen(
 
     Scaffold(
         modifier = modifier,
-        containerColor = Color(0xDDE7DFDF)
+        containerColor = appAuthBackground()
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -90,7 +94,7 @@ fun AuthScreen(
                     .padding(top = 70.dp, start = 16.dp, end = 16.dp)
                     .fillMaxWidth(),
                 shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                colors = CardDefaults.cardColors(containerColor = appSurface()),
                 elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
             ) {
                 Column(
@@ -106,7 +110,7 @@ fun AuthScreen(
                             ) {
                                 Text(
                                     text = if (authMode == AuthMode.LOGIN) "Вход" else "Регистрация",
-                                    color = if (isSelected) MaterialTheme.colorScheme.primary else Color(0xFF6E6E6E),
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else appTextSecondary(),
                                     fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium
                                 )
                             }
@@ -122,7 +126,7 @@ fun AuthScreen(
                     Text(
                         text = subtitle,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFF6E6E6E)
+                        color = appTextSecondary()
                     )
 
                     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -136,9 +140,9 @@ fun AuthScreen(
                             shape = RoundedCornerShape(18.dp),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                             colors = OutlinedTextFieldDefaults.colors(
-                                unfocusedContainerColor = Color.White,
-                                focusedContainerColor = Color.White,
-                                unfocusedBorderColor = Color(0xFFE2E5EA),
+                                unfocusedContainerColor = appSurface(),
+                                focusedContainerColor = appSurface(),
+                                unfocusedBorderColor = appBorder(),
                                 focusedBorderColor = Color(0xFFFF6F61)
                             )
                         )
@@ -174,9 +178,9 @@ fun AuthScreen(
                                 }
                             },
                             colors = OutlinedTextFieldDefaults.colors(
-                                unfocusedContainerColor = Color.White,
-                                focusedContainerColor = Color.White,
-                                unfocusedBorderColor = Color(0xFFE2E5EA),
+                                unfocusedContainerColor = appSurface(),
+                                focusedContainerColor = appSurface(),
+                                unfocusedBorderColor = appBorder(),
                                 focusedBorderColor = Color(0xFFFF6F61)
                             )
                         )
@@ -227,7 +231,7 @@ fun AuthScreen(
                             } else {
                                 "Уже есть аккаунт? "
                             },
-                            color = Color(0xFF6E6E6E)
+                            color = appTextSecondary()
                         )
                         Text(
                             text = if (mode == AuthMode.LOGIN) "Зарегистрироваться" else "Войти",

@@ -126,7 +126,15 @@ class BackendBooksRepository(
                 ?: error("Сервер не вернул идентификатор фото")
 
             uploadedPhotoMapping[uploadedPhoto.id.toString()] = photo.uriString
-            Log.d(TAG, "uploadPhoto success index=$index backendPhotoId=${uploadedPhoto.id}")
+            Log.d(
+                TAG,
+                "uploadPhoto success index=$index " +
+                    "backendPhotoId=${uploadedPhoto.id} " +
+                    "objectKey=${uploadedPhoto.objectKey} " +
+                    "fileName=${uploadedPhoto.fileName} " +
+                    "contentType=${uploadedPhoto.contentType} " +
+                    "templateId=${uploadedPhoto.templateId}"
+            )
         }
 
         Log.d(TAG, "uploadPhotos success uploadedIds=${uploadedPhotoMapping.keys}")
@@ -137,7 +145,7 @@ class BackendBooksRepository(
         templateId: String,
         uploadedPhotoIds: List<String>
     ): ProcessResponseDto {
-        Log.d(TAG, "processPhotoOrder start templateId=$templateId photoIds=$uploadedPhotoIds")
+        Log.d(TAG, "processPhotoOrder start templateId=$templateId backendPhotoIds=$uploadedPhotoIds")
         val response = processApi.process(
             ProcessRequestDto(
                 templateId = templateId,

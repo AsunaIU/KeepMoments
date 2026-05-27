@@ -15,9 +15,11 @@ import android.net.Uri
 import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
-import com.example.myapplication.model.BookPage
-import com.example.myapplication.model.BookSlot
-import com.example.myapplication.model.RenderedBook
+import com.example.myapplication.model.AlbumLayouts
+import com.example.myapplication.model.AlbumPage
+import com.example.myapplication.model.AlbumSlot
+import com.example.myapplication.model.EditableAlbum
+import com.example.myapplication.model.SelectedPhoto
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.max
@@ -27,28 +29,28 @@ class AndroidPdfExporter(
     private val contentResolver: ContentResolver
 ) : PdfExporter {
 
-    override suspend fun export(book: RenderedBook, destination: Uri): Result<Unit> = withContext(Dispatchers.IO) {
+    override suspend fun export(album: EditableAlbum, destination: Uri): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
-            val outputStream = contentResolver.openOutputStream(destination)
-                ?: error("Не удалось открыть файл для записи")
+            val photosById = album.draft.selectedPhotos.associateBy { it.id }
 
             val document = PdfDocument()
             try {
-                book.filledTemplate.pages.forEachIndexed { index, page ->
+                album.pages.forEachIndexed { index, page ->
                     val pageInfo = PdfDocument.PageInfo.Builder(PAGE_WIDTH, PAGE_HEIGHT, index + 1).create()
                     val pdfPage = document.startPage(pageInfo)
                     drawPage(
                         canvas = pdfPage.canvas,
                         page = page,
                         pageNumber = index + 1,
-                        totalPages = book.filledTemplate.pages.size
+                        totalPages = album.pages.size,
+                        photosById = photosById
                     )
                     document.finishPage(pdfPage)
                 }
 
-                outputStream.use { stream ->
+                contentResolver.openOutputStream(destination)?.use { stream ->
                     document.writeTo(stream)
-                }
+                } ?: error("Не удалось открыть файл для записи")
             } finally {
                 document.close()
             }
@@ -57,9 +59,10 @@ class AndroidPdfExporter(
 
     private fun drawPage(
         canvas: Canvas,
-        page: BookPage,
+        page: AlbumPage,
         pageNumber: Int,
-        totalPages: Int
+        totalPages: Int,
+        photosById: Map<String, SelectedPhoto>
     ) {
         canvas.drawColor(PAGE_BACKGROUND_COLOR)
 
@@ -71,22 +74,36 @@ class AndroidPdfExporter(
         )
         drawPhotoFrame(canvas = canvas, frameRect = frameRect)
 
-        if (page.slots.size != 1) {
-            drawUnsupportedLayout(
-                canvas = canvas,
-                frameRect = frameRect,
-                pageNumber = pageNumber,
-                totalPages = totalPages
+        val contentRect = frameRect.inset(PHOTO_FRAME_INSET)
+        val layout = AlbumLayouts.require(page.layoutId)
+        val slotsByKey = page.slots.associateBy { it.slotKey }
+        layout.slots.forEach { slotSpec ->
+            val slot = slotsByKey[slotSpec.key]
+            val photoRect = RectF(
+                contentRect.left + contentRect.width() * slotSpec.rect.left,
+                contentRect.top + contentRect.height() * slotSpec.rect.top,
+                contentRect.left + contentRect.width() * slotSpec.rect.right,
+                contentRect.top + contentRect.height() * slotSpec.rect.bottom
             )
-            return
+            drawPhoto(
+                canvas = canvas,
+                slot = slot,
+                photo = slot?.photoId?.let(photosById::get),
+                destination = photoRect
+            )
+            if (slot?.caption?.isNotBlank() == true) {
+                drawCaption(canvas = canvas, slot = slot, photoRect = photoRect)
+            }
         }
-
-        val slot = page.slots.first()
-        val photoRect = frameRect.inset(PHOTO_FRAME_INSET)
-
-        drawPhoto(canvas = canvas, slot = slot, destination = photoRect)
-        if (slot.caption.isNotBlank()) {
-            drawCaption(canvas = canvas, slot = slot, photoRect = photoRect)
+        page.stickers.sortedBy { it.zIndex }.forEach { sticker ->
+            drawSticker(
+                canvas = canvas,
+                sticker = sticker.sticker,
+                x = contentRect.left + contentRect.width() * sticker.x,
+                y = contentRect.top + contentRect.height() * sticker.y,
+                scale = sticker.scale,
+                rotation = sticker.rotation
+            )
         }
         drawPageCounter(canvas = canvas, pageNumber = pageNumber, totalPages = totalPages)
     }
@@ -103,14 +120,17 @@ class AndroidPdfExporter(
 
     private fun drawPhoto(
         canvas: Canvas,
-        slot: BookSlot,
+        slot: AlbumSlot?,
+        photo: SelectedPhoto?,
         destination: RectF
     ) {
-        val bitmap = decodeScaledBitmap(
-            uri = Uri.parse(slot.photoId),
-            requestedWidth = destination.width().toInt(),
-            requestedHeight = destination.height().toInt()
-        )
+        val bitmap = photo?.let {
+            decodeScaledBitmap(
+                uri = Uri.parse(it.uriString),
+                requestedWidth = destination.width().toInt(),
+                requestedHeight = destination.height().toInt()
+            )
+        }
 
         val photoPath = Path().apply {
             addRoundRect(destination, PHOTO_RADIUS, PHOTO_RADIUS, Path.Direction.CW)
@@ -131,7 +151,7 @@ class AndroidPdfExporter(
                 textAlign = Paint.Align.CENTER
             }
             canvas.drawText(
-                "Фото недоступно",
+                if (slot?.photoId == null) "+" else "Фото недоступно",
                 destination.centerX(),
                 destination.centerY(),
                 textPaint
@@ -140,11 +160,14 @@ class AndroidPdfExporter(
             return
         }
 
-        val srcRect = centerCropSourceRect(
+        val srcRect = transformedCenterCropSourceRect(
             srcWidth = bitmap.width,
             srcHeight = bitmap.height,
             dstWidth = destination.width().toInt(),
-            dstHeight = destination.height().toInt()
+            dstHeight = destination.height().toInt(),
+            scale = slot?.cropScale ?: 1f,
+            offsetX = slot?.cropOffsetX ?: 0f,
+            offsetY = slot?.cropOffsetY ?: 0f
         )
         canvas.drawBitmap(bitmap, srcRect, destination, null)
         bitmap.recycle()
@@ -153,7 +176,7 @@ class AndroidPdfExporter(
 
     private fun drawCaption(
         canvas: Canvas,
-        slot: BookSlot,
+        slot: AlbumSlot,
         photoRect: RectF
     ) {
         val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -219,24 +242,17 @@ class AndroidPdfExporter(
         )
     }
 
-    private fun drawUnsupportedLayout(
-        canvas: Canvas,
-        frameRect: RectF,
-        pageNumber: Int,
-        totalPages: Int
-    ) {
+    private fun drawSticker(canvas: Canvas, sticker: String, x: Float, y: Float, scale: Float, rotation: Float) {
         val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.parseColor("#111827")
-            textSize = 42f
+            color = Color.BLACK
+            textSize = 72f * scale.coerceIn(0.4f, 4f)
             textAlign = Paint.Align.CENTER
         }
-        canvas.drawText(
-            "Этот layout пока не поддерживается",
-            frameRect.centerX(),
-            frameRect.centerY(),
-            textPaint
-        )
-        drawPageCounter(canvas = canvas, pageNumber = pageNumber, totalPages = totalPages)
+        canvas.save()
+        canvas.rotate(rotation, x, y)
+        val centeredBaseline = y - (textPaint.descent() + textPaint.ascent()) / 2f
+        canvas.drawText(sticker, x, centeredBaseline, textPaint)
+        canvas.restore()
     }
 
     private fun decodeScaledBitmap(
@@ -290,16 +306,19 @@ class AndroidPdfExporter(
         return max(sampleSize, 1)
     }
 
-    private fun centerCropSourceRect(
+    private fun transformedCenterCropSourceRect(
         srcWidth: Int,
         srcHeight: Int,
         dstWidth: Int,
-        dstHeight: Int
+        dstHeight: Int,
+        scale: Float,
+        offsetX: Float,
+        offsetY: Float
     ): Rect {
         val srcAspect = srcWidth.toFloat() / srcHeight.toFloat()
         val dstAspect = dstWidth.toFloat() / dstHeight.toFloat()
 
-        return if (srcAspect > dstAspect) {
+        val base = if (srcAspect > dstAspect) {
             val targetWidth = (srcHeight * dstAspect).toInt()
             val left = (srcWidth - targetWidth) / 2
             Rect(left, 0, left + targetWidth, srcHeight)
@@ -308,6 +327,18 @@ class AndroidPdfExporter(
             val top = (srcHeight - targetHeight) / 2
             Rect(0, top, srcWidth, top + targetHeight)
         }
+        val safeScale = scale.coerceIn(1f, 4f)
+        val cropWidth = (base.width() / safeScale).toInt().coerceAtLeast(1)
+        val cropHeight = (base.height() / safeScale).toInt().coerceAtLeast(1)
+        val maxLeft = srcWidth - cropWidth
+        val maxTop = srcHeight - cropHeight
+        val centerX = (base.centerX() + offsetX.coerceIn(-1f, 1f) * base.width() * 0.35f)
+            .coerceIn(cropWidth / 2f, srcWidth - cropWidth / 2f)
+        val centerY = (base.centerY() + offsetY.coerceIn(-1f, 1f) * base.height() * 0.35f)
+            .coerceIn(cropHeight / 2f, srcHeight - cropHeight / 2f)
+        val left = (centerX - cropWidth / 2f).toInt().coerceIn(0, maxLeft)
+        val top = (centerY - cropHeight / 2f).toInt().coerceIn(0, maxTop)
+        return Rect(left, top, left + cropWidth, top + cropHeight)
     }
 
     private companion object {

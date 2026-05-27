@@ -36,8 +36,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.example.myapplication.ui.theme.KeepMomentsTheme
-import com.example.myapplication.ui.theme.ScreenBg
-import com.example.myapplication.ui.theme.TextSecondary
+import com.example.myapplication.ui.theme.appBackground
+import com.example.myapplication.ui.theme.appTextSecondary
 import com.example.myapplication.viewmodel.ProfileUiState
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -58,7 +58,7 @@ fun ProfileSettingsScreen(
 
     Scaffold(
         modifier = modifier,
-        containerColor = ScreenBg,
+        containerColor = appBackground(),
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text("Настройки") },
@@ -119,7 +119,7 @@ fun ProfileSettingsScreen(
                 Text(
                     text = "Email: ${uiState.emailLabel}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = TextSecondary
+                    color = appTextSecondary()
                 )
             }
 
