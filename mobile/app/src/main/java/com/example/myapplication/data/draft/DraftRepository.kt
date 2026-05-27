@@ -31,7 +31,9 @@ class DraftRepository(
     suspend fun createDraft(
         ownerType: DraftOwnerType,
         ownerUserId: Long?,
-        photos: List<SelectedPhoto>
+        photos: List<SelectedPhoto>,
+        storyPrompt: String? = null,
+        generateCaptions: Boolean = true
     ): String {
         val now = System.currentTimeMillis()
         val draftId = UUID.randomUUID().toString()
@@ -42,7 +44,8 @@ class DraftRepository(
                 ownerUserId = ownerUserId,
                 title = null,
                 bookType = "PHOTOBOOK",
-                storyPrompt = null,
+                storyPrompt = storyPrompt?.takeIf { it.isNotBlank() },
+                generateCaptions = generateCaptions,
                 styleId = null,
                 tone = null,
                 fontSet = null,
@@ -101,12 +104,30 @@ class DraftRepository(
         )
     }
 
+    suspend fun updateDraftStoryPrompt(draftId: String, storyPrompt: String?) {
+        draftDao.updateDraftStoryPrompt(
+            draftId = draftId,
+            storyPrompt = storyPrompt?.takeIf { it.isNotBlank() },
+            timestamp = System.currentTimeMillis()
+        )
+    }
+
+    suspend fun updateDraftGenerateCaptions(draftId: String, generateCaptions: Boolean) {
+        draftDao.updateDraftGenerateCaptions(
+            draftId = draftId,
+            generateCaptions = generateCaptions,
+            timestamp = System.currentTimeMillis()
+        )
+    }
+
     private fun DraftWithPhotos.toModel(): BookDraft {
         return BookDraft(
             id = draft.id,
             ownerType = DraftOwnerType.valueOf(draft.ownerType),
             ownerUserId = draft.ownerUserId,
             title = draft.title,
+            storyPrompt = draft.storyPrompt,
+            generateCaptions = draft.generateCaptions,
             createdAt = draft.createdAt,
             updatedAt = draft.updatedAt,
             selectedPhotos = photos

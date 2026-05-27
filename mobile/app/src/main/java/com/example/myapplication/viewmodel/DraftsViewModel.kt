@@ -62,7 +62,11 @@ class DraftsViewModel(
         initialValue = DraftsUiState()
     )
 
-    suspend fun createDraftFromUris(uris: List<Uri>): String? {
+    suspend fun createDraftFromUris(
+        uris: List<Uri>,
+        storyPrompt: String? = null,
+        generateCaptions: Boolean = true
+    ): String? {
         if (uris.isEmpty()) return null
 
         return runCatching {
@@ -77,7 +81,9 @@ class DraftsViewModel(
                 draftRepository.createDraft(
                     ownerType = if (session == null) DraftOwnerType.GUEST else DraftOwnerType.USER,
                     ownerUserId = session?.userId,
-                    photos = importedPhotos
+                    photos = importedPhotos,
+                    storyPrompt = storyPrompt,
+                    generateCaptions = generateCaptions
                 )
             }
         }.onFailure { throwable ->

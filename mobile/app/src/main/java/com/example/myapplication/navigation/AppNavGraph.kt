@@ -28,6 +28,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.myapplication.AppContainer
+import com.example.myapplication.ui.AlbumEditorScreen
 import com.example.myapplication.ui.AuthScreen
 import com.example.myapplication.ui.DraftsScreen
 import com.example.myapplication.ui.HomeScreen
@@ -35,6 +36,10 @@ import com.example.myapplication.ui.PhotoPreviewScreen
 import com.example.myapplication.ui.ProfileScreen
 import com.example.myapplication.ui.ProfileSettingsScreen
 import com.example.myapplication.ui.RenderedBookScreen
+import com.example.myapplication.ui.StoryPromptScreen
+import com.example.myapplication.viewmodel.AlbumEditorEvent
+import com.example.myapplication.viewmodel.AlbumEditorNavigation
+import com.example.myapplication.viewmodel.AlbumEditorViewModel
 import com.example.myapplication.viewmodel.AuthViewModel
 import com.example.myapplication.viewmodel.DraftEditorViewModel
 import com.example.myapplication.viewmodel.DraftsViewModel
@@ -124,9 +129,7 @@ fun AppNavGraph(
                     isCreatingDraft = draftsUiState.isCreating,
                     onCreateBookClick = {
                         if (authUiState.isAuthenticated) {
-                            launcher.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                            )
+                            navController.navigate(AppDestination.StoryPrompt.route)
                         } else {
                             Log.d(navigationTag, "create book requires auth from home")
                             navController.navigate(AppDestination.Auth.route)
@@ -135,6 +138,40 @@ fun AppNavGraph(
                     onProfileClick = { navController.navigate(AppDestination.Profile.route) },
                     onAuthClick = { navController.navigate(AppDestination.Auth.route) },
                     onLogoutClick = authViewModel::logout
+                )
+            }
+
+            composable(AppDestination.StoryPrompt.route) {
+                val storyPrompt = rememberSaveable { mutableStateOf("") }
+                val generateCaptions = rememberSaveable { mutableStateOf(true) }
+                val launcher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = DraftsViewModel.PHOTO_LIMIT)
+                ) { uris ->
+                    if (uris.isNotEmpty()) {
+                        persistReadPermissions(context, uris)
+                        scope.launch {
+                            val draftId = draftsViewModel.createDraftFromUris(
+                                uris = uris,
+                                storyPrompt = storyPrompt.value,
+                                generateCaptions = generateCaptions.value
+                            )
+                            if (draftId != null) {
+                                navController.navigate(AppDestination.Preview.createRoute(draftId))
+                            }
+                        }
+                    }
+                }
+
+                StoryPromptScreen(
+                    storyPrompt = storyPrompt.value,
+                    generateCaptions = generateCaptions.value,
+                    isCreatingDraft = draftsUiState.isCreating,
+                    onBackClick = { navController.popBackStack() },
+                    onStoryPromptChange = { storyPrompt.value = it },
+                    onGenerateCaptionsChange = { generateCaptions.value = it },
+                    onPickPhotosClick = {
+                        launcher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                    }
                 )
             }
 
@@ -157,7 +194,14 @@ fun AppNavGraph(
                     uiState = draftsUiState,
                     onBackClick = { navController.popBackStack() },
                     onOpenDraftClick = { draftId ->
-                        navController.navigate(AppDestination.Preview.createRoute(draftId))
+                        scope.launch {
+                            val hasAlbum = appContainer.albumRepository.ensureDemoAlbumForDraft(draftId)
+                            if (hasAlbum) {
+                                navController.navigate(AppDestination.Rendered.createRoute(draftId))
+                            } else {
+                                snackbarHostState.showSnackbar("Добавьте фото, чтобы посмотреть макет")
+                            }
+                        }
                     },
                     onDeleteDraftClick = draftsViewModel::deleteDraft,
                     onCreateDraftClick = { navController.popBackStack() }
@@ -194,16 +238,21 @@ fun AppNavGraph(
                     },
                     onCreateNewClick = {
                         if (authUiState.isAuthenticated) {
-                            launcher.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                            )
+                            navController.navigate(AppDestination.StoryPrompt.route)
                         } else {
                             Log.d(navigationTag, "create book requires auth from profile")
                             navController.navigate(AppDestination.Auth.route)
                         }
                     },
                     onOpenDraftClick = { draftId ->
-                        navController.navigate(AppDestination.Preview.createRoute(draftId))
+                        scope.launch {
+                            val hasAlbum = appContainer.albumRepository.ensureDemoAlbumForDraft(draftId)
+                            if (hasAlbum) {
+                                navController.navigate(AppDestination.Rendered.createRoute(draftId))
+                            } else {
+                                snackbarHostState.showSnackbar("Добавьте фото, чтобы посмотреть макет")
+                            }
+                        }
                     },
                     onAllBooksClick = { navController.navigate(AppDestination.Drafts.route) },
                     onSettingsClick = { navController.navigate(AppDestination.ProfileSettings.route) },
@@ -271,7 +320,8 @@ fun AppNavGraph(
                         authRepository = appContainer.authRepository,
                         photoImportService = appContainer.photoImportService,
                         booksRepository = appContainer.booksRepository,
-                        renderedBookStore = appContainer.renderedBookStore
+                        renderedBookStore = appContainer.renderedBookStore,
+                        albumRepository = appContainer.albumRepository
                     )
                 )
                 val uiState = draftEditorViewModel.uiState.collectAsStateWithLifecycle().value
@@ -338,7 +388,7 @@ fun AppNavGraph(
                     key = "rendered-$draftId",
                     factory = RenderedBookViewModel.Factory(
                         draftId = draftId,
-                        renderedBookStore = appContainer.renderedBookStore,
+                        albumRepository = appContainer.albumRepository,
                         pdfExporter = appContainer.pdfExporter
                     )
                 )
@@ -360,7 +410,7 @@ fun AppNavGraph(
                 }
 
                 RenderedBookScreen(
-                    book = renderedBookUiState.book,
+                    album = renderedBookUiState.album,
                     isExporting = renderedBookUiState.isExporting,
                     onBackClick = { navController.popBackStack() },
                     onProfileClick = {
@@ -371,9 +421,94 @@ fun AppNavGraph(
                             launchSingleTop = true
                         }
                     },
+                    onEditClick = {
+                        navController.navigate(AppDestination.AlbumEditor.createRoute(draftId))
+                    },
                     onDownloadPdfClick = {
                         createDocumentLauncher.launch("keepmoments-$draftId.pdf")
                     }
+                )
+            }
+
+            composable(
+                route = AppDestination.AlbumEditor.route,
+                arguments = listOf(
+                    navArgument(AppDestination.AlbumEditor.DRAFT_ID_ARG) {
+                        type = NavType.StringType
+                    }
+                )
+            ) { backStackEntry ->
+                val draftId = backStackEntry.arguments?.getString(AppDestination.AlbumEditor.DRAFT_ID_ARG)
+                    ?: return@composable
+                val albumEditorViewModel: AlbumEditorViewModel = viewModel(
+                    key = "album-editor-$draftId",
+                    factory = AlbumEditorViewModel.Factory(
+                        draftId = draftId,
+                        albumRepository = appContainer.albumRepository,
+                        draftRepository = appContainer.draftRepository,
+                        photoImportService = appContainer.photoImportService
+                    )
+                )
+                val editorUiState = albumEditorViewModel.uiState.collectAsStateWithLifecycle().value
+                val editorPhotoLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = DraftEditorViewModel.PHOTO_LIMIT)
+                ) { uris ->
+                    if (uris.isNotEmpty()) {
+                        persistReadPermissions(context, uris)
+                        albumEditorViewModel.importPhotosFromDevice(uris)
+                    }
+                }
+
+                LaunchedEffect(Unit) {
+                    albumEditorViewModel.events.collect { event ->
+                        when (event) {
+                            is AlbumEditorEvent.Message -> snackbarHostState.showSnackbar(event.text)
+                            is AlbumEditorEvent.Navigate -> when (event.destination) {
+                                AlbumEditorNavigation.Back -> navController.popBackStack()
+                                AlbumEditorNavigation.Done -> navController.popBackStack()
+                                AlbumEditorNavigation.Profile -> {
+                                    navController.navigate(AppDestination.Profile.route) {
+                                        popUpTo(AppDestination.Home.route) { inclusive = false }
+                                        launchSingleTop = true
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                AlbumEditorScreen(
+                    uiState = editorUiState,
+                    onBackClick = albumEditorViewModel::requestBack,
+                    onProfileClick = albumEditorViewModel::requestProfile,
+                    onDoneClick = albumEditorViewModel::requestDone,
+                    onSaveClick = { albumEditorViewModel.saveCurrentPage() },
+                    onSavePromptSave = albumEditorViewModel::saveAndContinue,
+                    onSavePromptDiscard = albumEditorViewModel::discardAndContinue,
+                    onTabClick = albumEditorViewModel::selectTab,
+                    onPageChange = albumEditorViewModel::requestPageChange,
+                    onSlotClick = albumEditorViewModel::selectSlot,
+                    onEmptySlotClick = albumEditorViewModel::selectEmptySlot,
+                    onCaptionClick = albumEditorViewModel::selectCaption,
+                    onCaptionChange = albumEditorViewModel::updateCaptionText,
+                    onCaptionDeleteClick = albumEditorViewModel::deleteCaption,
+                    onDismissSlotMenu = albumEditorViewModel::dismissSlotMenu,
+                    onReplaceSlotClick = albumEditorViewModel::startReplaceSelectedSlot,
+                    onDeleteSlotClick = albumEditorViewModel::deleteSelectedSlotPhoto,
+                    onPhotoClick = albumEditorViewModel::addPhotoToCurrentSlot,
+                    onPickFromDeviceClick = {
+                        editorPhotoLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
+                    },
+                    onLayoutClick = albumEditorViewModel::requestLayout,
+                    onOrientationReplaceClick = albumEditorViewModel::replaceForOrientationAndApply,
+                    onOrientationCancelClick = albumEditorViewModel::cancelOrientationPrompt,
+                    onSlotTransform = albumEditorViewModel::updateSlotTransform,
+                    onStickerClick = albumEditorViewModel::addSticker,
+                    onStickerSelected = albumEditorViewModel::selectSticker,
+                    onStickerTransform = albumEditorViewModel::updateSticker,
+                    onDeleteStickerClick = albumEditorViewModel::deleteSelectedSticker
                 )
             }
         }

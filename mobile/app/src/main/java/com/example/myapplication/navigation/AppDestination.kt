@@ -6,6 +6,7 @@ sealed class AppDestination(val route: String) {
     data object Profile : AppDestination("profile")
     data object ProfileSettings : AppDestination("profile/settings")
     data object Drafts : AppDestination("drafts")
+    data object StoryPrompt : AppDestination("story-prompt")
     data object Preview : AppDestination("preview/{draftId}") {
         const val DRAFT_ID_ARG = "draftId"
 
@@ -16,5 +17,11 @@ sealed class AppDestination(val route: String) {
         const val DRAFT_ID_ARG = "draftId"
 
         fun createRoute(draftId: String): String = "rendered/$draftId"
+    }
+
+    data object AlbumEditor : AppDestination("album-editor/{draftId}") {
+        const val DRAFT_ID_ARG = "draftId"
+
+        fun createRoute(draftId: String): String = "album-editor/$draftId"
     }
 }

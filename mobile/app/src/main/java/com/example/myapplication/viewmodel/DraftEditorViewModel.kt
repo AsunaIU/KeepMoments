@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.myapplication.data.auth.AuthRepository
+import com.example.myapplication.data.album.AlbumRepository
 import com.example.myapplication.data.books.BooksRepository
 import com.example.myapplication.data.books.RenderedBookStore
 import com.example.myapplication.data.draft.DraftRepository
@@ -30,11 +31,13 @@ class DraftEditorViewModel(
     private val authRepository: AuthRepository,
     private val photoImportService: PhotoImportService,
     private val booksRepository: BooksRepository,
-    private val renderedBookStore: RenderedBookStore
+    private val renderedBookStore: RenderedBookStore,
+    private val albumRepository: AlbumRepository
 ) : ViewModel() {
 
     companion object {
         const val PHOTO_LIMIT = 50
+        const val STORY_PROMPT_LIMIT = 500
         private const val TAG = "DraftEditor"
     }
 
@@ -109,6 +112,7 @@ class DraftEditorViewModel(
         DraftEditorUiState(
             draftId = draftId,
             ownerType = draft?.ownerType,
+            storyPrompt = draft?.storyPrompt.orEmpty(),
             selectedPhotos = draft?.selectedPhotos.orEmpty(),
             isLoading = !transientState.hasLoadedDraft,
             isProcessing = transientState.isProcessing,
@@ -163,6 +167,15 @@ class DraftEditorViewModel(
         }
     }
 
+    fun onStoryPromptChanged(value: String) {
+        viewModelScope.launch {
+            draftRepository.updateDraftStoryPrompt(
+                draftId = draftId,
+                storyPrompt = value.take(STORY_PROMPT_LIMIT)
+            )
+        }
+    }
+
     fun onContinueClicked() {
         val currentDraft = draftFlow.value
         Log.d(TAG, "continue clicked draftId=$draftId")
@@ -184,11 +197,16 @@ class DraftEditorViewModel(
             Log.d(TAG, "continue generating book draftId=$draftId")
             _isGeneratingBook.value = true
             _errorMessage.value = null
+            draftRepository.updateDraftStoryPrompt(
+                draftId = draftId,
+                storyPrompt = currentDraft.storyPrompt
+            )
             val result = booksRepository.generateRenderedBook(currentDraft)
             _isGeneratingBook.value = false
 
             result.onSuccess { book ->
                 renderedBookStore.save(draftId = draftId, book = book)
+                albumRepository.createInitialAlbumFromRenderedBook(book)
                 Log.d(TAG, "continue success draftId=$draftId navigate rendered")
                 _generatedBookDraftId.value = draftId
             }.onFailure { throwable ->
@@ -216,7 +234,8 @@ class DraftEditorViewModel(
         private val authRepository: AuthRepository,
         private val photoImportService: PhotoImportService,
         private val booksRepository: BooksRepository,
-        private val renderedBookStore: RenderedBookStore
+        private val renderedBookStore: RenderedBookStore,
+        private val albumRepository: AlbumRepository
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
@@ -227,7 +246,8 @@ class DraftEditorViewModel(
                     authRepository = authRepository,
                     photoImportService = photoImportService,
                     booksRepository = booksRepository,
-                    renderedBookStore = renderedBookStore
+                    renderedBookStore = renderedBookStore,
+                    albumRepository = albumRepository
                 ) as T
             }
             throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
@@ -238,6 +258,7 @@ class DraftEditorViewModel(
 data class DraftEditorUiState(
     val draftId: String,
     val ownerType: DraftOwnerType? = null,
+    val storyPrompt: String = "",
     val selectedPhotos: List<SelectedPhoto> = emptyList(),
     val isLoading: Boolean = false,
     val isProcessing: Boolean = false,

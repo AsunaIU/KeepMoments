@@ -45,8 +45,10 @@ import coil.compose.AsyncImage
 import com.example.myapplication.model.BookDraftSummary
 import com.example.myapplication.model.DraftOwnerType
 import com.example.myapplication.ui.theme.KeepMomentsTheme
-import com.example.myapplication.ui.theme.ScreenBg
-import com.example.myapplication.ui.theme.TextSecondary
+import com.example.myapplication.ui.theme.appBackground
+import com.example.myapplication.ui.theme.appSurface
+import com.example.myapplication.ui.theme.appSurfaceVariant
+import com.example.myapplication.ui.theme.appTextSecondary
 import com.example.myapplication.viewmodel.DraftsUiState
 import java.text.DateFormat
 import java.util.Date
@@ -64,7 +66,7 @@ fun DraftsScreen(
 ) {
     Scaffold(
         modifier = modifier,
-        containerColor = ScreenBg,
+        containerColor = appBackground(),
         topBar = {
             CenterAlignedTopAppBar(
                 title = { Text("Все фотокниги") },
@@ -94,7 +96,7 @@ fun DraftsScreen(
                     "Сейчас видны только гостевые фотокниги. Альбомы аккаунта появятся после входа."
                 },
                 style = MaterialTheme.typography.bodyMedium,
-                color = TextSecondary
+                color = appTextSecondary()
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -123,7 +125,7 @@ private fun EmptyDraftsState(
     onCreateDraftClick: () -> Unit
 ) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = appSurface()),
         shape = RoundedCornerShape(24.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
@@ -140,7 +142,7 @@ private fun EmptyDraftsState(
             )
             Text(
                 text = "Создайте новую фотокнигу в профиле или на главном экране. После выбора фото она появится здесь автоматически.",
-                color = TextSecondary
+                color = appTextSecondary()
             )
             TextButton(onClick = onCreateDraftClick) {
                 Text("На главный экран")
@@ -164,7 +166,7 @@ private fun DraftCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onOpenClick),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = appSurface()),
         shape = RoundedCornerShape(22.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
@@ -179,7 +181,7 @@ private fun DraftCard(
                 modifier = Modifier
                     .size(84.dp)
                     .clip(RoundedCornerShape(18.dp))
-                    .background(Color(0xFFF0F1F5)),
+                    .background(appSurfaceVariant()),
                 contentAlignment = Alignment.Center
             ) {
                 if (draft.coverUriString != null) {
@@ -193,7 +195,7 @@ private fun DraftCard(
                     Icon(
                         imageVector = Icons.Default.Image,
                         contentDescription = null,
-                        tint = TextSecondary
+                        tint = appTextSecondary()
                     )
                 }
             }
@@ -221,12 +223,12 @@ private fun DraftCard(
 
                 Text(
                     text = "${draft.photoCount} фото, валидных ${draft.validPhotoCount}",
-                    color = TextSecondary,
+                    color = appTextSecondary(),
                     style = MaterialTheme.typography.bodyMedium
                 )
                 Text(
                     text = "Обновлён $dateText",
-                    color = TextSecondary,
+                    color = appTextSecondary(),
                     style = MaterialTheme.typography.bodySmall
                 )
             }
@@ -235,7 +237,7 @@ private fun DraftCard(
                 Icon(
                     imageVector = Icons.Default.DeleteOutline,
                     contentDescription = "Удалить черновик",
-                    tint = TextSecondary
+                    tint = appTextSecondary()
                 )
             }
         }
