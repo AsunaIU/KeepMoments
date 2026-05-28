@@ -21,6 +21,7 @@ data class AlbumSlot(
     val pageId: String,
     val slotKey: String,
     val photoId: String?,
+    val remotePhotoId: String? = null,
     val caption: String = "",
     val cropScale: Float = 1f,
     val cropOffsetX: Float = 0f,

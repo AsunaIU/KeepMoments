@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.example.myapplication.BuildConfig
 import com.example.myapplication.model.AlbumLayouts
 import com.example.myapplication.model.AlbumPage
 import com.example.myapplication.model.AlbumSlot
@@ -71,6 +72,7 @@ fun AlbumPageRenderer(
                 val slotWidth = width * slotSpec.rect.width
                 val slotHeight = height * slotSpec.rect.height
                 val photo = slot.photoId?.let(photosById::get)
+                val hasImage = photo != null || slot.remotePhotoId != null
                 AlbumSlotContent(
                     slot = slot,
                     photo = photo,
@@ -81,7 +83,7 @@ fun AlbumPageRenderer(
                         .size(slotWidth, slotHeight)
                         .then(slotModifier(slot)),
                     onClick = {
-                        if (photo == null) {
+                        if (!hasImage) {
                             onEmptySlotClick?.invoke(slot)
                         } else {
                             onSlotClick?.invoke(slot)
@@ -155,7 +157,8 @@ private fun AlbumSlotContent(
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        if (photo == null) {
+        val imageModel = slot.imageModel(photo)
+        if (imageModel == null) {
             Icon(
                 imageVector = Icons.Default.Add,
                 contentDescription = "Добавить фото",
@@ -163,8 +166,8 @@ private fun AlbumSlotContent(
             )
         } else {
             AsyncImage(
-                model = Uri.parse(photo.uriString),
-                contentDescription = photo.displayName,
+                model = imageModel,
+                contentDescription = photo?.displayName,
                 modifier = Modifier
                     .fillMaxSize()
                     .graphicsLayer(
@@ -219,6 +222,13 @@ private fun AlbumSlotContent(
             }
         }
     }
+}
+
+private fun AlbumSlot.imageModel(photo: SelectedPhoto?): Any? {
+    remotePhotoId?.takeIf { it.isNotBlank() }?.let { photoId ->
+        return BuildConfig.API_BASE_URL + "api/v1/photos/$photoId/file"
+    }
+    return photo?.uriString?.let(Uri::parse)
 }
 
 @Composable

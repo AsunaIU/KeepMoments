@@ -18,7 +18,7 @@ data class BookPage(
 
 data class BookSlot(
     val id: String,
-    // For local preview/PDF we store Uri.toString() here.
     val photoId: String,
+    val remotePhotoId: String? = null,
     val caption: String = ""
 )

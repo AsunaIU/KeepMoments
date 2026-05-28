@@ -173,7 +173,13 @@ class AlbumEditorViewModel(
     fun deleteSelectedSlotPhoto() {
         val selectedSlotId = _uiState.value.slotMenu?.id ?: _uiState.value.selectedSlotId ?: return
         updateEditablePage { page ->
-            page.copy(slots = page.slots.map { slot -> if (slot.id == selectedSlotId) slot.copy(photoId = null) else slot })
+            page.copy(slots = page.slots.map { slot ->
+                if (slot.id == selectedSlotId) {
+                    slot.copy(photoId = null, remotePhotoId = null)
+                } else {
+                    slot
+                }
+            })
         }
         _uiState.update { it.copy(slotMenu = null) }
     }
@@ -188,7 +194,11 @@ class AlbumEditorViewModel(
         }
         updateEditablePage { current ->
             current.copy(slots = current.slots.map { slot ->
-                if (slot.id == targetSlotId) slot.copy(photoId = photoId, cropScale = 1f, cropOffsetX = 0f, cropOffsetY = 0f) else slot
+                if (slot.id == targetSlotId) {
+                    slot.copy(photoId = photoId, remotePhotoId = null, cropScale = 1f, cropOffsetX = 0f, cropOffsetY = 0f)
+                } else {
+                    slot
+                }
             })
         }
     }
@@ -214,17 +224,20 @@ class AlbumEditorViewModel(
                 return@launch
             }
 
+            var newPhotos = emptyList<SelectedPhoto>()
             runCatching {
-                photoImportService.createSelectedPhotos(selectedToAdd)
-            }.onSuccess { newPhotos ->
+                newPhotos = photoImportService.createSelectedPhotos(selectedToAdd)
                 draftRepository.addPhotos(draftId = draftId, photos = newPhotos)
-                newPhotos.firstOrNull()?.let { photo ->
+                newPhotos
+            }.onSuccess { importedPhotos ->
+                importedPhotos.firstOrNull()?.let { photo ->
                     addPhotoToCurrentSlot(photo.id)
                 }
                 if (uniqueIncoming.size > selectedToAdd.size) {
                     emitMessage("Можно выбрать максимум $PHOTO_LIMIT фото")
                 }
             }.onFailure { throwable ->
+                photoImportService.deleteLocalCopies(newPhotos)
                 emitMessage(throwable.localizedMessage ?: "Не удалось добавить фотографии")
             }
         }
@@ -265,7 +278,7 @@ class AlbumEditorViewModel(
         _uiState.update { it.copy(orientationPromptLayoutId = null) }
         val rebuilt = albumRepository.buildPageWithLayout(page, layoutId).copy(
             slots = albumRepository.buildPageWithLayout(page, layoutId).slots.mapIndexed { index, slot ->
-                slot.copy(photoId = chosen[index]?.id, cropScale = 1f, cropOffsetX = 0f, cropOffsetY = 0f)
+                slot.copy(photoId = chosen[index]?.id, remotePhotoId = null, cropScale = 1f, cropOffsetX = 0f, cropOffsetY = 0f)
             }
         )
         setEditablePage(rebuilt)

@@ -148,13 +148,15 @@ class DraftEditorViewModel(
 
             _isProcessing.value = true
             _errorMessage.value = null
+            var newPhotos = emptyList<SelectedPhoto>()
             runCatching {
-                val newPhotos = photoImportService.createSelectedPhotos(selectedToAdd)
+                newPhotos = photoImportService.createSelectedPhotos(selectedToAdd)
                 draftRepository.addPhotos(draftId = draftId, photos = newPhotos)
                 if (uniqueIncoming.size > selectedToAdd.size) {
                     _errorMessage.value = "Можно выбрать максимум $PHOTO_LIMIT фото"
                 }
             }.onFailure { throwable ->
+                photoImportService.deleteLocalCopies(newPhotos)
                 _errorMessage.value = throwable.localizedMessage ?: "Не удалось добавить фотографии"
             }
             _isProcessing.value = false
