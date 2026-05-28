@@ -49,7 +49,7 @@ class AlbumRepository(
 
     suspend fun createInitialAlbumFromRenderedBook(book: RenderedBook) {
         val draft = draftDao.getDraft(book.draftId) ?: return
-        val photosByUri = draft.photos.associateBy { it.uriString }
+        val photosById = draft.photos.associateBy { it.id }
         val storyPrompt = draft.draft.storyPrompt.orEmpty()
         val generateCaptions = draft.draft.generateCaptions
         val now = System.currentTimeMillis()
@@ -57,7 +57,8 @@ class AlbumRepository(
         val slotEntities = mutableListOf<AlbumSlotEntity>()
 
         book.filledTemplate.pages.forEachIndexed { index, page ->
-            val firstPhoto = page.slots.firstOrNull()?.photoId?.let(photosByUri::get)
+            val firstSlot = page.slots.firstOrNull()
+            val firstPhoto = firstSlot?.photoId?.let(photosById::get)
             val selectedPhoto = firstPhoto?.toSelectedPhoto()
             val pageId = page.id.ifBlank { "page-${index + 1}" }
             val layoutId = AlbumLayouts.defaultSingleLayout(selectedPhoto)
@@ -75,6 +76,7 @@ class AlbumRepository(
                     pageId = pageId,
                     slotKey = slotSpec.key,
                     photoId = firstPhoto?.id,
+                    remotePhotoId = firstSlot?.remotePhotoId,
                     caption = if (generateCaptions) captionFor(index = index, storyPrompt = storyPrompt) else "",
                     cropScale = 1f,
                     cropOffsetX = 0f,
@@ -120,6 +122,7 @@ class AlbumRepository(
                     pageId = pageId,
                     slotKey = slotSpec.key,
                     photoId = photo.id,
+                    remotePhotoId = null,
                     caption = if (generateCaptions) captionFor(index = index, storyPrompt = storyPrompt) else "",
                     cropScale = 1f,
                     cropOffsetX = 0f,
@@ -156,17 +159,19 @@ class AlbumRepository(
 
     fun buildPageWithLayout(page: AlbumPage, layoutId: String): AlbumPage {
         val layout = AlbumLayouts.require(layoutId)
-        val existingPhotos = page.slots.mapNotNull { it.photoId }
+        val existingSlots = page.slots.filter { it.photoId != null }
         val existingByKey = page.slots.associateBy { it.slotKey }
         return page.copy(
             layoutId = layoutId,
             slots = layout.slots.mapIndexed { index, spec ->
                 val previous = existingByKey[spec.key]
+                val fallback = existingSlots.getOrNull(index)
                 AlbumSlot(
                     id = "${page.id}-${spec.key}",
                     pageId = page.id,
                     slotKey = spec.key,
-                    photoId = previous?.photoId ?: existingPhotos.getOrNull(index),
+                    photoId = previous?.photoId ?: fallback?.photoId,
+                    remotePhotoId = previous?.remotePhotoId ?: fallback?.remotePhotoId,
                     caption = previous?.caption.orEmpty(),
                     cropScale = previous?.cropScale ?: 1f,
                     cropOffsetX = previous?.cropOffsetX ?: 0f,
@@ -194,6 +199,7 @@ class AlbumRepository(
         pageId = pageId,
         slotKey = slotKey,
         photoId = photoId,
+        remotePhotoId = remotePhotoId,
         caption = caption,
         cropScale = cropScale,
         cropOffsetX = cropOffsetX,
@@ -205,6 +211,7 @@ class AlbumRepository(
         pageId = pageId,
         slotKey = slotKey,
         photoId = photoId,
+        remotePhotoId = remotePhotoId,
         caption = caption,
         cropScale = cropScale,
         cropOffsetX = cropOffsetX,
@@ -236,7 +243,7 @@ class AlbumRepository(
     private fun com.example.myapplication.data.draft.DraftWithPhotos.toDraftModel(): BookDraft {
         return BookDraft(
             id = draft.id,
-            ownerType = DraftOwnerType.valueOf(draft.ownerType),
+            ownerType = DraftOwnerType.fromStorageValue(draft.ownerType),
             ownerUserId = draft.ownerUserId,
             title = draft.title,
             storyPrompt = draft.storyPrompt,

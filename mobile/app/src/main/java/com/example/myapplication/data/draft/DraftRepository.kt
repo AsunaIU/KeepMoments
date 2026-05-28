@@ -1,5 +1,7 @@
 package com.example.myapplication.data.draft
 
+import android.net.Uri
+import com.example.myapplication.data.media.PhotoLocalStorage
 import com.example.myapplication.model.BookDraft
 import com.example.myapplication.model.BookDraftSummary
 import com.example.myapplication.model.DraftOwnerType
@@ -9,7 +11,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 class DraftRepository(
-    private val draftDao: DraftDao
+    private val draftDao: DraftDao,
+    private val photoLocalStorage: PhotoLocalStorage
 ) {
 
     fun observeVisibleDrafts(userId: Long?): Flow<List<BookDraftSummary>> {
@@ -76,6 +79,7 @@ class DraftRepository(
 
     suspend fun removePhoto(draftId: String, photoId: String) {
         val draft = draftDao.getDraft(draftId) ?: return
+        val removedPhoto = draft.photos.firstOrNull { it.id == photoId }
         val remainingPhotos = draft.photos
             .filterNot { it.id == photoId }
             .sortedBy { it.position }
@@ -85,11 +89,23 @@ class DraftRepository(
         if (remainingPhotos.isNotEmpty()) {
             draftDao.updatePhotos(remainingPhotos)
         }
+        removedPhoto?.let { photo ->
+            photoLocalStorage.deleteLocalCopy(Uri.parse(photo.uriString))
+        }
         draftDao.touchDraft(draftId = draftId, timestamp = System.currentTimeMillis())
     }
 
     suspend fun deleteDraft(draftId: String) {
+        val photoUris = draftDao.getDraft(draftId)?.photos.orEmpty().map { it.uriString }
         draftDao.deleteDraftById(draftId)
+        photoUris.forEach { uriString ->
+            photoLocalStorage.deleteLocalCopy(Uri.parse(uriString))
+        }
+        cleanupOrphanedLocalPhotos()
+    }
+
+    suspend fun cleanupOrphanedLocalPhotos() {
+        photoLocalStorage.deleteUnusedLocalCopies(draftDao.getAllPhotoUriStrings())
     }
 
     suspend fun touchDraft(draftId: String) {
@@ -123,7 +139,7 @@ class DraftRepository(
     private fun DraftWithPhotos.toModel(): BookDraft {
         return BookDraft(
             id = draft.id,
-            ownerType = DraftOwnerType.valueOf(draft.ownerType),
+            ownerType = DraftOwnerType.fromStorageValue(draft.ownerType),
             ownerUserId = draft.ownerUserId,
             title = draft.title,
             storyPrompt = draft.storyPrompt,
@@ -153,7 +169,7 @@ class DraftRepository(
         val sortedPhotos = photos.sortedBy { it.position }
         return BookDraftSummary(
             id = draft.id,
-            ownerType = DraftOwnerType.valueOf(draft.ownerType),
+            ownerType = DraftOwnerType.fromStorageValue(draft.ownerType),
             ownerUserId = draft.ownerUserId,
             title = draft.title,
             updatedAt = draft.updatedAt,

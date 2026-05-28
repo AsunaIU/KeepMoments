@@ -24,7 +24,7 @@ class FakeBooksRepository : BooksRepository {
                             slots = listOf(
                                 BookSlot(
                                     id = "slot-1",
-                                    photoId = photo.uriString,
+                                    photoId = photo.id,
                                     caption = ""
                                 )
                             )
