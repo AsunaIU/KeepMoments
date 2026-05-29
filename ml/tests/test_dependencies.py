@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 from app.dependencies import (
     get_clip_model_dep,
     get_download_executor,
+    get_http_client,
     get_s3_client,
 )
 
@@ -50,3 +51,15 @@ def test_get_clip_model_dep_unchanged():
     request = _fake_request_with_state(clip_model=model, clip_preprocess=preprocess)
     m, p = get_clip_model_dep(request)
     assert m is model and p is preprocess
+
+
+def test_get_http_client_returns_app_state_singleton():
+    fake_http = MagicMock(name="httpx-async-client")
+    request = _fake_request_with_state(http_client=fake_http)
+    assert get_http_client(request) is fake_http
+
+
+def test_get_download_executor_returns_none_when_unset():
+    """In backend mode the executor is None — dependency must propagate that."""
+    request = _fake_request_with_state(download_executor=None)
+    assert get_download_executor(request) is None
