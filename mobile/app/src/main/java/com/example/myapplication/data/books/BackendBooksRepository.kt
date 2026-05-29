@@ -70,10 +70,16 @@ class BackendBooksRepository(
 
                 val template = resolveTemplate(validPhotos.size)
                 val uploadedPhotos = uploadPhotos(template.id, validPhotos)
+                val userDescription = if (draft.generateCaptions) {
+                    draft.storyPrompt.orEmpty().trim()
+                } else {
+                    ""
+                }
+                Log.d(TAG, "generateRenderedBook storyPrompt='${draft.storyPrompt}' generateCaptions=${draft.generateCaptions} → userDescription='$userDescription'")
                 val processResponse = processPhotoOrder(
                     templateId = template.id,
                     uploadedPhotoIds = uploadedPhotos.keys.toList(),
-                    userDescription = draft.storyPrompt.orEmpty().trim().ifBlank { "Фотоальбом" }
+                    userDescription = userDescription
                 )
 
                 buildRenderedBook(
@@ -187,7 +193,7 @@ class BackendBooksRepository(
         uploadedPhotoIds: List<String>,
         userDescription: String
     ): ProcessResponseDto {
-        Log.d(TAG, "processPhotoOrder start templateId=$templateId backendPhotoIds=$uploadedPhotoIds")
+        Log.d(TAG, "processPhotoOrder start templateId=$templateId photoCount=${uploadedPhotoIds.size} userDescription='$userDescription'")
         val response = processApi.process(
             ProcessRequestDto(
                 templateId = templateId,
@@ -207,6 +213,12 @@ class BackendBooksRepository(
         return (response.body() ?: error("Сервер вернул пустой ответ при сборке книги")).also { body ->
             val orderedPhotoIds = body.filledTemplate.pages.flatMap { page -> page.slots.mapNotNull { it.photoId } }
             Log.d(TAG, "processPhotoOrder success pages=${body.filledTemplate.pages.size} orderedPhotoIds=$orderedPhotoIds")
+            body.filledTemplate.pages.forEach { page ->
+                Log.d(TAG, "processPhotoOrder raw page=${page.id} caption=${page.caption.orEmpty().ifBlank { "<empty>" }} slots=${page.slots.size}")
+                page.slots.forEach { slot ->
+                    Log.d(TAG, "processPhotoOrder raw slot=${slot.id} photoId=${slot.photoId} caption=${slot.caption} description=${slot.description} descriptionJson=${slot.descriptionJson}")
+                }
+            }
         }
     }
 

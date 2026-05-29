@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -153,11 +154,8 @@ private fun AlbumSlotContent(
 ) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
+            .clip(RoundedCornerShape(0.dp))
             .background(Color(0xFFE7E7E7))
-            .then(
-                if (selected) Modifier.border(2.dp, Color.White, RoundedCornerShape(14.dp)) else Modifier
-            )
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
@@ -232,7 +230,8 @@ private fun PageCaptionContent(
                 text = page.caption,
                 color = Color.Black,
                 style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center
             )
         }
     }

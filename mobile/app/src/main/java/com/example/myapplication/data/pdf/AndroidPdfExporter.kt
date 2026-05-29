@@ -105,7 +105,6 @@ class AndroidPdfExporter(
         if (page.caption.isNotBlank()) {
             drawPageCaption(canvas = canvas, caption = page.caption, contentRect = contentRect)
         }
-        drawPageCounter(canvas = canvas, pageNumber = pageNumber, totalPages = totalPages)
     }
 
     private fun drawPhotoFrame(
@@ -351,8 +350,8 @@ class AndroidPdfExporter(
         const val CAPTION_BOX_VERTICAL_PADDING = 16f
         const val CAPTION_BOX_RADIUS = 18f
         const val MAX_CAPTION_BOX_WIDTH = 760f
-        const val FRAME_RADIUS = 28f
-        const val PHOTO_RADIUS = 24f
+        const val FRAME_RADIUS = 0f
+        const val PHOTO_RADIUS = 0f
     }
 }
 

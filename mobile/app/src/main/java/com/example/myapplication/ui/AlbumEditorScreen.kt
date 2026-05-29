@@ -280,7 +280,7 @@ private fun EditorPage(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(0.72f),
-            shape = RoundedCornerShape(28.dp),
+            shape = RoundedCornerShape(0.dp),
             color = Color.White,
             shadowElevation = 4.dp
         ) {

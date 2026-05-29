@@ -161,7 +161,7 @@ fun RenderedBookScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .aspectRatio(0.72f),
-                        shape = RoundedCornerShape(28.dp),
+                        shape = RoundedCornerShape(0.dp),
                         color = appSurface(),
                         shadowElevation = 2.dp
                     ) {
