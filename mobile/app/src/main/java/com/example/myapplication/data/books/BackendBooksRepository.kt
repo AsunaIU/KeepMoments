@@ -14,6 +14,9 @@ import com.google.gson.JsonElement
 import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -127,45 +130,52 @@ class BackendBooksRepository(
         photos: List<SelectedPhoto>
     ): LinkedHashMap<String, UploadedPhoto> {
         Log.d(TAG, "uploadPhotos start templateId=$templateId count=${photos.size}")
+
+        val results = coroutineScope {
+            photos.mapIndexed { index, photo ->
+                async {
+                    Log.d(
+                        TAG,
+                        "uploadPhoto start index=$index name=${photo.displayName} mime=${photo.mimeType} size=${photo.sizeBytes} uri=${photo.uriString}"
+                    )
+                    val response = photosApi.uploadPhoto(
+                        templateId = templateId.toPlainTextRequestBody(),
+                        file = createPhotoPart(photo)
+                    )
+                    Log.d(TAG, "uploadPhoto response index=$index code=${response.code()} successful=${response.isSuccessful}")
+                    if (!response.isSuccessful) {
+                        val errorMessage = extractErrorMessage(response)
+                        Log.e(TAG, "uploadPhoto failed index=$index error=$errorMessage")
+                        error("Не удалось загрузить фото на сервер: $errorMessage")
+                    }
+
+                    val uploadedPhoto = response.body()
+                        ?: error("Сервер не вернул идентификатор фото")
+
+                    val backendPhotoId = uploadedPhoto.id.toString()
+                    val description = extractDescriptionText(uploadedPhoto.descriptionJson)
+                    Log.d(
+                        TAG,
+                        "uploadPhoto success index=$index " +
+                            "backendPhotoId=${uploadedPhoto.id} " +
+                            "objectKey=${uploadedPhoto.objectKey} " +
+                            "fileName=${uploadedPhoto.fileName} " +
+                            "contentType=${uploadedPhoto.contentType} " +
+                            "templateId=${uploadedPhoto.templateId} " +
+                            "hasDescription=${description != null}"
+                    )
+                    index to Pair(backendPhotoId, UploadedPhoto(
+                        localPhotoId = photo.id,
+                        backendPhotoId = backendPhotoId,
+                        description = description
+                    ))
+                }
+            }.awaitAll()
+        }
+
         val uploadedPhotos = linkedMapOf<String, UploadedPhoto>()
-
-        photos.forEachIndexed { index, photo ->
-            Log.d(
-                TAG,
-                "uploadPhoto start index=$index name=${photo.displayName} mime=${photo.mimeType} size=${photo.sizeBytes} uri=${photo.uriString}"
-            )
-            Log.d(TAG, "uploadPhoto request description_json omitted; captions must come from backend/ML")
-            val response = photosApi.uploadPhoto(
-                templateId = templateId.toPlainTextRequestBody(),
-                file = createPhotoPart(photo)
-            )
-            Log.d(TAG, "uploadPhoto response index=$index code=${response.code()} successful=${response.isSuccessful}")
-            if (!response.isSuccessful) {
-                val errorMessage = extractErrorMessage(response)
-                Log.e(TAG, "uploadPhoto failed index=$index error=$errorMessage")
-                error("Не удалось загрузить фото на сервер: $errorMessage")
-            }
-
-            val uploadedPhoto = response.body()
-                ?: error("Сервер не вернул идентификатор фото")
-
-            val backendPhotoId = uploadedPhoto.id.toString()
-            val description = extractDescriptionText(uploadedPhoto.descriptionJson)
-            uploadedPhotos[backendPhotoId] = UploadedPhoto(
-                localPhotoId = photo.id,
-                backendPhotoId = backendPhotoId,
-                description = description
-            )
-            Log.d(
-                TAG,
-                "uploadPhoto success index=$index " +
-                    "backendPhotoId=${uploadedPhoto.id} " +
-                    "objectKey=${uploadedPhoto.objectKey} " +
-                    "fileName=${uploadedPhoto.fileName} " +
-                    "contentType=${uploadedPhoto.contentType} " +
-                    "templateId=${uploadedPhoto.templateId} " +
-                    "hasDescription=${description != null}"
-            )
+        results.sortedBy { it.first }.forEach { (_, entry) ->
+            uploadedPhotos[entry.first] = entry.second
         }
 
         Log.d(TAG, "uploadPhotos success uploadedIds=${uploadedPhotos.keys}")
