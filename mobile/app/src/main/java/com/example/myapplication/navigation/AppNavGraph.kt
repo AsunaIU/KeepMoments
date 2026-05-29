@@ -31,6 +31,7 @@ import com.example.myapplication.AppContainer
 import com.example.myapplication.ui.AlbumEditorScreen
 import com.example.myapplication.ui.AuthScreen
 import com.example.myapplication.ui.DraftsScreen
+import com.example.myapplication.ui.GenerationLoadingScreen
 import com.example.myapplication.ui.HomeScreen
 import com.example.myapplication.ui.PhotoPreviewScreen
 import com.example.myapplication.ui.ProfileScreen
@@ -358,20 +359,24 @@ fun AppNavGraph(
                     }
                 }
 
-                PhotoPreviewScreen(
-                    uiState = uiState,
-                    onBackClick = { navController.popBackStack() },
-                    onAddMoreClick = {
-                        launcher.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                        )
-                    },
-                    onRemoveClick = draftEditorViewModel::onRemovePhoto,
-                    onContinueClick = draftEditorViewModel::onContinueClicked,
-                    onOpenDraftsClick = {
-                        navController.navigate(AppDestination.Drafts.route)
-                    }
-                )
+                if (uiState.isGeneratingBook) {
+                    GenerationLoadingScreen()
+                } else {
+                    PhotoPreviewScreen(
+                        uiState = uiState,
+                        onBackClick = { navController.popBackStack() },
+                        onAddMoreClick = {
+                            launcher.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            )
+                        },
+                        onRemoveClick = draftEditorViewModel::onRemovePhoto,
+                        onContinueClick = draftEditorViewModel::onContinueClicked,
+                        onOpenDraftsClick = {
+                            navController.navigate(AppDestination.Drafts.route)
+                        }
+                    )
+                }
             }
 
             composable(
@@ -489,9 +494,9 @@ fun AppNavGraph(
                     onPageChange = albumEditorViewModel::requestPageChange,
                     onSlotClick = albumEditorViewModel::selectSlot,
                     onEmptySlotClick = albumEditorViewModel::selectEmptySlot,
-                    onCaptionClick = albumEditorViewModel::selectCaption,
-                    onCaptionChange = albumEditorViewModel::updateCaptionText,
-                    onCaptionDeleteClick = albumEditorViewModel::deleteCaption,
+                    onCaptionClick = albumEditorViewModel::selectPageCaption,
+                    onCaptionChange = albumEditorViewModel::updatePageCaptionText,
+                    onCaptionDeleteClick = albumEditorViewModel::deletePageCaption,
                     onDismissSlotMenu = albumEditorViewModel::dismissSlotMenu,
                     onReplaceSlotClick = albumEditorViewModel::startReplaceSelectedSlot,
                     onDeleteSlotClick = albumEditorViewModel::deleteSelectedSlotPhoto,

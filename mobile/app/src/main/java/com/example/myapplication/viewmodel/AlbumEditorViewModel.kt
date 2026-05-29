@@ -131,10 +131,10 @@ class AlbumEditorViewModel(
         emitMessage("Выберите фото из галереи")
     }
 
-    fun selectCaption(slot: AlbumSlot) {
+    fun selectPageCaption(page: AlbumPage) {
         _uiState.update {
             it.copy(
-                selectedCaptionSlotId = slot.id,
+                selectedCaptionSlotId = page.id,
                 selectedSlotId = null,
                 selectedStickerId = null,
                 slotMenu = null
@@ -142,21 +142,17 @@ class AlbumEditorViewModel(
         }
     }
 
-    fun updateCaptionText(slotId: String, caption: String) {
+    fun updatePageCaptionText(caption: String) {
+        val pageId = _uiState.value.editablePage?.id ?: return
         updateEditablePage { page ->
-            page.copy(slots = page.slots.map { slot ->
-                if (slot.id == slotId) slot.copy(caption = caption.take(CAPTION_LIMIT)) else slot
-            })
+            page.copy(caption = caption.take(CAPTION_LIMIT))
         }
-        _uiState.update { it.copy(selectedCaptionSlotId = slotId) }
+        _uiState.update { it.copy(selectedCaptionSlotId = pageId) }
     }
 
-    fun deleteCaption(slotId: String? = _uiState.value.selectedCaptionSlotId) {
-        val id = slotId ?: return
+    fun deletePageCaption() {
         updateEditablePage { page ->
-            page.copy(slots = page.slots.map { slot ->
-                if (slot.id == id) slot.copy(caption = "") else slot
-            })
+            page.copy(caption = "")
         }
         _uiState.update { it.copy(selectedCaptionSlotId = null) }
     }

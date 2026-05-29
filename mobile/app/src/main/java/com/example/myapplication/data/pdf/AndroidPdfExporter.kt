@@ -91,9 +91,6 @@ class AndroidPdfExporter(
                 photo = slot?.photoId?.let(photosById::get),
                 destination = photoRect
             )
-            if (slot?.caption?.isNotBlank() == true) {
-                drawCaption(canvas = canvas, slot = slot, photoRect = photoRect)
-            }
         }
         page.stickers.sortedBy { it.zIndex }.forEach { sticker ->
             drawSticker(
@@ -104,6 +101,9 @@ class AndroidPdfExporter(
                 scale = sticker.scale,
                 rotation = sticker.rotation
             )
+        }
+        if (page.caption.isNotBlank()) {
+            drawPageCaption(canvas = canvas, caption = page.caption, contentRect = contentRect)
         }
         drawPageCounter(canvas = canvas, pageNumber = pageNumber, totalPages = totalPages)
     }
@@ -174,10 +174,10 @@ class AndroidPdfExporter(
         canvas.restore()
     }
 
-    private fun drawCaption(
+    private fun drawPageCaption(
         canvas: Canvas,
-        slot: AlbumSlot,
-        photoRect: RectF
+        caption: String,
+        contentRect: RectF
     ) {
         val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.BLACK
@@ -185,9 +185,8 @@ class AndroidPdfExporter(
             typeface = Typeface.create(Typeface.SERIF, Typeface.ITALIC)
         }
 
-        val caption = slot.caption.ifBlank { return }
         val availableWidth = min(
-            photoRect.width() - CAPTION_HORIZONTAL_PADDING * 2,
+            contentRect.width() - CAPTION_HORIZONTAL_PADDING * 2,
             MAX_CAPTION_BOX_WIDTH
         ).toInt().coerceAtLeast(1)
         val layout = StaticLayout.Builder
@@ -196,17 +195,14 @@ class AndroidPdfExporter(
             .setLineSpacing(0f, 1.04f)
             .build()
 
-        val captionPath = Path().apply {
-            addRoundRect(photoRect, PHOTO_RADIUS, PHOTO_RADIUS, Path.Direction.CW)
-        }
         val captionBoxTop = max(
-            photoRect.top + CAPTION_MIN_TOP_PADDING,
-            photoRect.bottom - CAPTION_BOTTOM_PADDING - layout.height - CAPTION_BOX_VERTICAL_PADDING * 2
+            contentRect.top + CAPTION_MIN_TOP_PADDING,
+            contentRect.bottom - CAPTION_BOTTOM_PADDING - layout.height - CAPTION_BOX_VERTICAL_PADDING * 2
         )
         val captionBoxRect = RectF(
-            photoRect.centerX() - layout.width / 2f - CAPTION_BOX_HORIZONTAL_PADDING,
+            contentRect.centerX() - layout.width / 2f - CAPTION_BOX_HORIZONTAL_PADDING,
             captionBoxTop,
-            photoRect.centerX() + layout.width / 2f + CAPTION_BOX_HORIZONTAL_PADDING,
+            contentRect.centerX() + layout.width / 2f + CAPTION_BOX_HORIZONTAL_PADDING,
             captionBoxTop + layout.height + CAPTION_BOX_VERTICAL_PADDING * 2
         )
         val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -214,10 +210,9 @@ class AndroidPdfExporter(
         }
 
         canvas.save()
-        canvas.clipPath(captionPath)
         canvas.drawRoundRect(captionBoxRect, CAPTION_BOX_RADIUS, CAPTION_BOX_RADIUS, backgroundPaint)
         canvas.translate(
-            photoRect.centerX() - layout.width / 2f,
+            contentRect.centerX() - layout.width / 2f,
             captionBoxTop + CAPTION_BOX_VERTICAL_PADDING
         )
         layout.draw(canvas)

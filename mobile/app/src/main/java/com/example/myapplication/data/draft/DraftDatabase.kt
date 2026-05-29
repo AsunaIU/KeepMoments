@@ -15,7 +15,7 @@ import com.example.myapplication.data.album.AlbumDao
         AlbumSlotEntity::class,
         AlbumStickerEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class DraftDatabase : RoomDatabase() {

@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -50,9 +51,9 @@ fun AlbumPageRenderer(
     selectedCaptionSlotId: String? = null,
     onSlotClick: ((AlbumSlot) -> Unit)? = null,
     onEmptySlotClick: ((AlbumSlot) -> Unit)? = null,
-    onCaptionClick: ((AlbumSlot) -> Unit)? = null,
-    onCaptionChange: ((AlbumSlot, String) -> Unit)? = null,
-    onCaptionDelete: ((AlbumSlot) -> Unit)? = null,
+    onCaptionClick: ((AlbumPage) -> Unit)? = null,
+    onCaptionChange: ((AlbumPage, String) -> Unit)? = null,
+    onCaptionDelete: ((AlbumPage) -> Unit)? = null,
     onStickerClick: ((AlbumSticker) -> Unit)? = null,
     onStickerDelete: ((AlbumSticker) -> Unit)? = null,
     slotModifier: (AlbumSlot) -> Modifier = { Modifier },
@@ -77,7 +78,6 @@ fun AlbumPageRenderer(
                     slot = slot,
                     photo = photo,
                     selected = selectedSlotId == slot.id,
-                    captionSelected = selectedCaptionSlotId == slot.id,
                     modifier = Modifier
                         .offset { IntOffset(x.roundToPx(), y.roundToPx()) }
                         .size(slotWidth, slotHeight)
@@ -88,10 +88,7 @@ fun AlbumPageRenderer(
                         } else {
                             onSlotClick?.invoke(slot)
                         }
-                    },
-                    onCaptionClick = { onCaptionClick?.invoke(slot) },
-                    onCaptionChange = { value -> onCaptionChange?.invoke(slot, value) },
-                    onCaptionDelete = { onCaptionDelete?.invoke(slot) }
+                    }
                 )
             }
 
@@ -131,6 +128,17 @@ fun AlbumPageRenderer(
                     }
                 }
             }
+
+            PageCaptionContent(
+                page = page,
+                selected = selectedCaptionSlotId == page.id,
+                onCaptionClick = { onCaptionClick?.invoke(page) },
+                onCaptionChange = { value -> onCaptionChange?.invoke(page, value) },
+                onCaptionDelete = { onCaptionDelete?.invoke(page) },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(horizontal = 18.dp, vertical = 14.dp)
+            )
         }
     }
 }
@@ -140,12 +148,8 @@ private fun AlbumSlotContent(
     slot: AlbumSlot,
     photo: SelectedPhoto?,
     selected: Boolean,
-    captionSelected: Boolean,
     modifier: Modifier,
-    onClick: () -> Unit,
-    onCaptionClick: () -> Unit,
-    onCaptionChange: (String) -> Unit,
-    onCaptionDelete: () -> Unit
+    onClick: () -> Unit
 ) {
     Box(
         modifier = modifier
@@ -178,48 +182,58 @@ private fun AlbumSlotContent(
                     ),
                 contentScale = ContentScale.Crop
             )
-            if (slot.caption.isNotBlank()) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .then(
-                            if (captionSelected) {
-                                Modifier.border(1.dp, Color.White.copy(alpha = 0.55f), RoundedCornerShape(10.dp))
-                            } else {
-                                Modifier
-                            }
-                        )
-                        .background(Color.White.copy(alpha = 0.78f), RoundedCornerShape(10.dp))
-                        .clickable(onClick = onCaptionClick)
-                        .padding(horizontal = 12.dp, vertical = 7.dp)
-                ) {
-                    if (captionSelected) {
-                        BasicTextField(
-                            value = slot.caption,
-                            onValueChange = onCaptionChange,
-                            textStyle = MaterialTheme.typography.bodyMedium.merge(
-                                TextStyle(color = Color.Black, fontWeight = FontWeight.SemiBold)
-                            ),
-                            modifier = Modifier.clickable(onClick = onCaptionClick)
-                        )
-                    } else {
-                        Text(
-                            text = slot.caption,
-                            color = Color.Black,
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                    if (captionSelected) {
-                        CloseButton(
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .offset(x = 20.dp, y = (-18).dp),
-                            onClick = onCaptionDelete
-                        )
-                    }
+        }
+    }
+}
+
+@Composable
+private fun PageCaptionContent(
+    page: AlbumPage,
+    selected: Boolean,
+    onCaptionClick: () -> Unit,
+    onCaptionChange: (String) -> Unit,
+    onCaptionDelete: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (page.caption.isBlank() && !selected) return
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .then(
+                if (selected) {
+                    Modifier.border(1.dp, Color.White.copy(alpha = 0.65f), RoundedCornerShape(14.dp))
+                } else {
+                    Modifier
                 }
-            }
+            )
+            .background(Color.White.copy(alpha = 0.84f), RoundedCornerShape(14.dp))
+            .clickable(onClick = onCaptionClick)
+            .padding(horizontal = 16.dp, vertical = 9.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        if (selected) {
+            BasicTextField(
+                value = page.caption,
+                onValueChange = onCaptionChange,
+                textStyle = MaterialTheme.typography.bodyMedium.merge(
+                    TextStyle(color = Color.Black, fontWeight = FontWeight.SemiBold)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
+            CloseButton(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = 26.dp, y = (-22).dp),
+                onClick = onCaptionDelete
+            )
+        } else {
+            Text(
+                text = page.caption,
+                color = Color.Black,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold
+            )
         }
     }
 }

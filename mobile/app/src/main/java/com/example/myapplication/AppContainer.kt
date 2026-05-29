@@ -25,6 +25,7 @@ import com.example.myapplication.data.media.PhotoImportService
 import com.example.myapplication.data.media.PhotoValidator
 import com.example.myapplication.data.pdf.AndroidPdfExporter
 import java.io.File
+import java.util.concurrent.TimeUnit
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -40,7 +41,12 @@ class AppContainer(
     }
 
     private val baseOkHttpClient: OkHttpClient by lazy {
-        OkHttpClient.Builder().build()
+        OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(120, TimeUnit.SECONDS)
+            .readTimeout(120, TimeUnit.SECONDS)
+            .callTimeout(180, TimeUnit.SECONDS)
+            .build()
     }
 
     private val authApi: AuthApi by lazy {
@@ -89,7 +95,7 @@ class AppContainer(
 
     private val draftDatabase: DraftDatabase by lazy {
         Room.databaseBuilder(appContext, DraftDatabase::class.java, "keepmoments.db")
-            .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+            .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
             .fallbackToDestructiveMigration()
             .build()
     }
@@ -226,6 +232,12 @@ class AppContainer(
         val MIGRATION_4_5 = object : Migration(4, 5) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE album_slots ADD COLUMN remotePhotoId TEXT")
+            }
+        }
+
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE album_pages ADD COLUMN caption TEXT NOT NULL DEFAULT ''")
             }
         }
     }

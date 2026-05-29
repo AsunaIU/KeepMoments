@@ -41,7 +41,8 @@ class AlbumRepository(
                     position = page.position,
                     layoutId = page.layoutId,
                     slots = slotsByPage[page.id].orEmpty().sortedBy { slot -> slot.slotKey }.map { it.toModel() },
-                    stickers = stickersByPage[page.id].orEmpty().sortedBy { sticker -> sticker.zIndex }.map { it.toModel() }
+                    stickers = stickersByPage[page.id].orEmpty().sortedBy { sticker -> sticker.zIndex }.map { it.toModel() },
+                    caption = page.caption
                 )
             }
         )
@@ -50,34 +51,43 @@ class AlbumRepository(
     suspend fun createInitialAlbumFromRenderedBook(book: RenderedBook) {
         val draft = draftDao.getDraft(book.draftId) ?: return
         val photosById = draft.photos.associateBy { it.id }
-        val storyPrompt = draft.draft.storyPrompt.orEmpty()
         val generateCaptions = draft.draft.generateCaptions
         val now = System.currentTimeMillis()
         val pageEntities = mutableListOf<AlbumPageEntity>()
         val slotEntities = mutableListOf<AlbumSlotEntity>()
 
         book.filledTemplate.pages.forEachIndexed { index, page ->
-            val firstSlot = page.slots.firstOrNull()
-            val firstPhoto = firstSlot?.photoId?.let(photosById::get)
-            val selectedPhoto = firstPhoto?.toSelectedPhoto()
-            val pageId = page.id.ifBlank { "page-${index + 1}" }
-            val layoutId = AlbumLayouts.defaultSingleLayout(selectedPhoto)
+            val pageSlots = page.slots.filter { slot -> photosById.containsKey(slot.photoId) }
+            if (pageSlots.isEmpty()) return@forEachIndexed
+
+            val pageId = "${book.draftId}-page-${index + 1}"
+            val pageCaption = if (generateCaptions) {
+                page.caption.ifBlank {
+                    pageSlots
+                        .mapNotNull { slot -> slot.caption.trim().takeIf { it.isNotBlank() } }
+                        .distinct()
+                        .joinToString(separator = "\n")
+                }
+            } else {
+                ""
+            }
             pageEntities += AlbumPageEntity(
                 id = pageId,
                 draftId = book.draftId,
                 position = index,
-                layoutId = layoutId,
+                layoutId = page.layoutId,
+                caption = pageCaption,
                 createdAt = now,
                 updatedAt = now
             )
-            AlbumLayouts.require(layoutId).slots.forEach { slotSpec ->
+            pageSlots.forEach { slot ->
                 slotEntities += AlbumSlotEntity(
-                    id = "$pageId-${slotSpec.key}",
+                    id = "$pageId-${slot.id}",
                     pageId = pageId,
-                    slotKey = slotSpec.key,
-                    photoId = firstPhoto?.id,
-                    remotePhotoId = firstSlot?.remotePhotoId,
-                    caption = if (generateCaptions) captionFor(index = index, storyPrompt = storyPrompt) else "",
+                    slotKey = slot.id,
+                    photoId = slot.photoId,
+                    remotePhotoId = slot.remotePhotoId,
+                    caption = if (generateCaptions) slot.caption else "",
                     cropScale = 1f,
                     cropOffsetX = 0f,
                     cropOffsetY = 0f
@@ -98,8 +108,6 @@ class AlbumRepository(
         val draft = draftDao.getDraft(draftId) ?: return false
         val photos = draft.photos.sortedBy { it.position }.filter { it.isValid }
         if (photos.isEmpty()) return false
-        val storyPrompt = draft.draft.storyPrompt.orEmpty()
-        val generateCaptions = draft.draft.generateCaptions
 
         val now = System.currentTimeMillis()
         val pageEntities = mutableListOf<AlbumPageEntity>()
@@ -113,6 +121,7 @@ class AlbumRepository(
                 draftId = draftId,
                 position = index,
                 layoutId = layoutId,
+                caption = "",
                 createdAt = now,
                 updatedAt = now
             )
@@ -123,7 +132,7 @@ class AlbumRepository(
                     slotKey = slotSpec.key,
                     photoId = photo.id,
                     remotePhotoId = null,
-                    caption = if (generateCaptions) captionFor(index = index, storyPrompt = storyPrompt) else "",
+                    caption = "",
                     cropScale = 1f,
                     cropOffsetX = 0f,
                     cropOffsetY = 0f
@@ -148,6 +157,7 @@ class AlbumRepository(
                 draftId = page.draftId,
                 position = page.position,
                 layoutId = page.layoutId,
+                caption = page.caption,
                 createdAt = existing?.createdAt ?: now,
                 updatedAt = now
             ),
@@ -172,7 +182,7 @@ class AlbumRepository(
                     slotKey = spec.key,
                     photoId = previous?.photoId ?: fallback?.photoId,
                     remotePhotoId = previous?.remotePhotoId ?: fallback?.remotePhotoId,
-                    caption = previous?.caption.orEmpty(),
+                    caption = previous?.caption ?: fallback?.caption.orEmpty(),
                     cropScale = previous?.cropScale ?: 1f,
                     cropOffsetX = previous?.cropOffsetX ?: 0f,
                     cropOffsetY = previous?.cropOffsetY ?: 0f
@@ -267,20 +277,4 @@ class AlbumRepository(
         position = position
     )
 
-    private fun captionFor(index: Int, storyPrompt: String): String {
-        if (index == 0 && storyPrompt.isNotBlank()) {
-            return storyPrompt.trim().take(80)
-        }
-        return defaultCaptions[index % defaultCaptions.size]
-    }
-
-    private companion object {
-        val defaultCaptions = listOf(
-            "Первый день путешествия",
-            "Момент, который хочется сохранить",
-            "Прекрасный день с близкими людьми",
-            "Прогулка в солнечный день",
-            "Новая страница нашей истории"
-        )
-    }
 }

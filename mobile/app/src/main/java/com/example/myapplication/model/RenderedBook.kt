@@ -13,7 +13,9 @@ data class FilledTemplate(
 
 data class BookPage(
     val id: String,
-    val slots: List<BookSlot>
+    val slots: List<BookSlot>,
+    val layoutId: String = id,
+    val caption: String = ""
 )
 
 data class BookSlot(

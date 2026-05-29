@@ -24,6 +24,7 @@ data class AlbumPageEntity(
     val draftId: String,
     val position: Int,
     val layoutId: String,
+    val caption: String = "",
     val createdAt: Long,
     val updatedAt: Long
 )

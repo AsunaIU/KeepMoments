@@ -10,6 +10,7 @@ import com.example.myapplication.model.BookSlot
 import com.example.myapplication.model.FilledTemplate
 import com.example.myapplication.model.RenderedBook
 import com.example.myapplication.model.SelectedPhoto
+import com.google.gson.JsonElement
 import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.Dispatchers
@@ -34,6 +35,17 @@ class BackendBooksRepository(
 
     companion object {
         private const val TAG = "BookGeneration"
+        private val DESCRIPTION_JSON_TEXT_KEYS = listOf(
+            "caption",
+            "description",
+            "text",
+            "summary",
+            "title",
+            "photo_caption",
+            "photoDescription",
+            "generated_caption",
+            "generatedCaption"
+        )
     }
 
     override suspend fun generateRenderedBook(draft: BookDraft): Result<RenderedBook> {
@@ -55,7 +67,11 @@ class BackendBooksRepository(
 
                 val template = resolveTemplate(validPhotos.size)
                 val uploadedPhotos = uploadPhotos(template.id, validPhotos)
-                val processResponse = processPhotoOrder(template.id, uploadedPhotos.keys.toList())
+                val processResponse = processPhotoOrder(
+                    templateId = template.id,
+                    uploadedPhotoIds = uploadedPhotos.keys.toList(),
+                    userDescription = draft.storyPrompt.orEmpty().trim().ifBlank { "Фотоальбом" }
+                )
 
                 buildRenderedBook(
                     draftId = draft.id,
@@ -72,7 +88,7 @@ class BackendBooksRepository(
     }
 
     private suspend fun resolveTemplate(photoCount: Int): ProcessTemplateDto {
-        val templateId = SinglePhotoPerPageTemplatePreset.templateId(photoCount)
+        val templateId = MobileLayoutsTemplatePreset.TEMPLATE_ID
         Log.d(TAG, "resolveTemplate start photoCount=$photoCount templateId=$templateId")
         val listResponse = templatesApi.listTemplates()
         Log.d(TAG, "resolveTemplate listTemplates code=${listResponse.code()} successful=${listResponse.isSuccessful}")
@@ -89,7 +105,7 @@ class BackendBooksRepository(
                 return it
             }
 
-        val templateRequest = SinglePhotoPerPageTemplatePreset.buildTemplate(photoCount)
+        val templateRequest = MobileLayoutsTemplatePreset.buildTemplate()
         Log.d(
             TAG,
             "resolveTemplate creating templateId=$templateId pages=${templateRequest.pages.size} firstPageSlots=${templateRequest.pages.firstOrNull()?.slots?.size ?: 0} firstSlotPhotoId=${templateRequest.pages.firstOrNull()?.slots?.firstOrNull()?.photoId}"
@@ -118,7 +134,7 @@ class BackendBooksRepository(
                 TAG,
                 "uploadPhoto start index=$index name=${photo.displayName} mime=${photo.mimeType} size=${photo.sizeBytes} uri=${photo.uriString}"
             )
-            Log.d(TAG, "uploadPhoto description_json omitted")
+            Log.d(TAG, "uploadPhoto request description_json omitted; captions must come from backend/ML")
             val response = photosApi.uploadPhoto(
                 templateId = templateId.toPlainTextRequestBody(),
                 file = createPhotoPart(photo)
@@ -134,9 +150,11 @@ class BackendBooksRepository(
                 ?: error("Сервер не вернул идентификатор фото")
 
             val backendPhotoId = uploadedPhoto.id.toString()
+            val description = extractDescriptionText(uploadedPhoto.descriptionJson)
             uploadedPhotos[backendPhotoId] = UploadedPhoto(
                 localPhotoId = photo.id,
-                backendPhotoId = backendPhotoId
+                backendPhotoId = backendPhotoId,
+                description = description
             )
             Log.d(
                 TAG,
@@ -145,7 +163,8 @@ class BackendBooksRepository(
                     "objectKey=${uploadedPhoto.objectKey} " +
                     "fileName=${uploadedPhoto.fileName} " +
                     "contentType=${uploadedPhoto.contentType} " +
-                    "templateId=${uploadedPhoto.templateId}"
+                    "templateId=${uploadedPhoto.templateId} " +
+                    "hasDescription=${description != null}"
             )
         }
 
@@ -155,7 +174,8 @@ class BackendBooksRepository(
 
     private suspend fun processPhotoOrder(
         templateId: String,
-        uploadedPhotoIds: List<String>
+        uploadedPhotoIds: List<String>,
+        userDescription: String
     ): ProcessResponseDto {
         Log.d(TAG, "processPhotoOrder start templateId=$templateId backendPhotoIds=$uploadedPhotoIds")
         val response = processApi.process(
@@ -164,7 +184,7 @@ class BackendBooksRepository(
                 photoIds = uploadedPhotoIds,
                 minPhotos = uploadedPhotoIds.size,
                 maxPhotos = uploadedPhotoIds.size,
-                userDescription = "Фотоальбом"
+                userDescription = userDescription
             )
         )
         Log.d(TAG, "processPhotoOrder response code=${response.code()} successful=${response.isSuccessful}")
@@ -187,27 +207,60 @@ class BackendBooksRepository(
         uploadedPhotos: Map<String, UploadedPhoto>
     ): RenderedBook {
         Log.d(TAG, "buildRenderedBook start draftId=$draftId templateId=$templateId")
-        val pages = response.filledTemplate.pages.map { page ->
+        val pages = response.filledTemplate.pages.mapIndexedNotNull { index, page ->
             Log.d(TAG, "buildRenderedBook page=${page.id} slots=${page.slots.size}")
-            BookPage(
-                id = page.id,
-                slots = page.slots.map { slot ->
-                    val backendPhotoId = slot.photoId
-                        ?: error("Сервер не вернул photo_id для одной из страниц")
-                    Log.d(TAG, "buildRenderedBook map backendPhotoId=$backendPhotoId localPhotoId=${uploadedPhotos[backendPhotoId]?.localPhotoId}")
-                    val uploadedPhoto = uploadedPhotos[backendPhotoId]
-                        ?: run {
-                            Log.e(TAG, "buildRenderedBook missing local mapping for backendPhotoId=$backendPhotoId")
-                            error("Не найдено локальное фото для backend photo_id=$backendPhotoId")
-                        }
+            val slots = page.slots.mapNotNull { slot ->
+                val backendPhotoId = slot.photoId ?: return@mapNotNull null
+                Log.d(TAG, "buildRenderedBook map backendPhotoId=$backendPhotoId localPhotoId=${uploadedPhotos[backendPhotoId]?.localPhotoId}")
+                val uploadedPhoto = uploadedPhotos[backendPhotoId]
+                    ?: run {
+                        Log.e(TAG, "buildRenderedBook missing local mapping for backendPhotoId=$backendPhotoId")
+                        error("Одно из фото недоступно. Попробуйте выбрать его заново.")
+                    }
 
-                    BookSlot(
-                        id = slot.id,
-                        photoId = uploadedPhoto.localPhotoId,
-                        remotePhotoId = uploadedPhoto.backendPhotoId,
-                        caption = ""
-                    )
-                }
+                BookSlot(
+                    id = slot.id,
+                    photoId = uploadedPhoto.localPhotoId,
+                    remotePhotoId = uploadedPhoto.backendPhotoId,
+                    caption = listOf(
+                        slot.caption,
+                        slot.description,
+                        slot.text,
+                        slot.summary,
+                        slot.photoCaption,
+                        extractDescriptionText(slot.descriptionJson),
+                        uploadedPhoto.description
+                    ).firstNotNullOfOrNull { it.normalizedCaption() }.orEmpty()
+                )
+            }
+
+            if (slots.isEmpty()) {
+                Log.d(TAG, "buildRenderedBook skip empty page=${page.id}")
+                return@mapIndexedNotNull null
+            }
+
+            val pageCaption = page.caption.normalizedCaption()
+                ?: slots.mapNotNull { it.caption.normalizedCaption() }
+                    .distinct()
+                    .joinToString(separator = "\n")
+                    .normalizedCaption()
+                ?: ""
+            Log.d(
+                TAG,
+                "buildRenderedBook page=${page.id} captionSource=" +
+                    when {
+                        page.caption.normalizedCaption() != null -> "page"
+                        pageCaption.isNotBlank() -> "slot_or_photo"
+                        else -> "none"
+                    } +
+                    " slotCaptions=${slots.count { it.caption.isNotBlank() }}"
+            )
+
+            BookPage(
+                id = "page-${index + 1}",
+                layoutId = page.id,
+                caption = pageCaption,
+                slots = slots
             )
         }
 
@@ -262,16 +315,53 @@ class BackendBooksRepository(
         override fun contentLength(): Long = contentLength ?: -1L
 
         override fun writeTo(sink: BufferedSink) {
-            contentResolver.openInputStream(uri)?.use { inputStream ->
-                sink.writeAll(inputStream.source())
-            } ?: throw IOException("Не удалось открыть выбранное фото")
+            try {
+                contentResolver.openInputStream(uri)?.use { inputStream ->
+                    sink.writeAll(inputStream.source())
+                } ?: throw IOException("Одно из фото недоступно. Попробуйте выбрать его заново.")
+            } catch (exception: IOException) {
+                throw IOException("Одно из фото недоступно. Попробуйте выбрать его заново.", exception)
+            }
         }
     }
 
     private data class UploadedPhoto(
         val localPhotoId: String,
-        val backendPhotoId: String
+        val backendPhotoId: String,
+        val description: String?
     )
+
+    private fun String?.normalizedCaption(): String? {
+        return this?.trim()?.takeIf { it.isNotBlank() }
+    }
+
+    private fun extractDescriptionText(element: JsonElement?): String? {
+        if (element == null || element.isJsonNull) return null
+
+        return when {
+            element.isJsonPrimitive -> element.asJsonPrimitive
+                .takeIf { it.isString }
+                ?.asString
+                .normalizedCaption()
+
+            element.isJsonArray -> element.asJsonArray
+                .mapNotNull(::extractDescriptionText)
+                .distinct()
+                .joinToString(separator = "\n")
+                .normalizedCaption()
+
+            element.isJsonObject -> extractDescriptionTextFromObject(element.asJsonObject)
+            else -> null
+        }
+    }
+
+    private fun extractDescriptionTextFromObject(element: JsonElement): String? {
+        val jsonObject = element.asJsonObject
+        return DESCRIPTION_JSON_TEXT_KEYS
+            .asSequence()
+            .mapNotNull { key -> extractDescriptionText(jsonObject.get(key)) }
+            .firstOrNull()
+    }
 
     private fun extractErrorMessage(response: Response<*>): String {
         val rawBody = response.errorBody()?.string().orEmpty()

@@ -11,7 +11,8 @@ data class AlbumPage(
     val position: Int,
     val layoutId: String,
     val slots: List<AlbumSlot>,
-    val stickers: List<AlbumSticker>
+    val stickers: List<AlbumSticker>,
+    val caption: String = ""
 ) {
     val isComplete: Boolean = slots.all { it.photoId != null }
 }
