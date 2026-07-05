@@ -1,0 +1,9 @@
+{
+  "access_token": "access-123",
+  "refresh_token": "refresh-456",
+  "token_type": "Bearer",
+  "access_expires_at": "2026-01-01T00:00:00Z",
+  "refresh_expires_at": "2026-02-01T00:00:00Z",
+  "email": "user@example.com",
+  "user_id": 42
+}

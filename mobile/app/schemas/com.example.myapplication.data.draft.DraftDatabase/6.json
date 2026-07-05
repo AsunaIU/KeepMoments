@@ -1,0 +1,526 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 6,
+    "identityHash": "18e09f2e56668cfc835bc5b7f802069a",
+    "entities": [
+      {
+        "tableName": "drafts",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `ownerType` TEXT NOT NULL, `ownerUserId` INTEGER, `title` TEXT, `bookType` TEXT NOT NULL, `storyPrompt` TEXT, `generateCaptions` INTEGER NOT NULL, `styleId` TEXT, `tone` TEXT, `fontSet` TEXT, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `lastOpenedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ownerType",
+            "columnName": "ownerType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ownerUserId",
+            "columnName": "ownerUserId",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "bookType",
+            "columnName": "bookType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "storyPrompt",
+            "columnName": "storyPrompt",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "generateCaptions",
+            "columnName": "generateCaptions",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "styleId",
+            "columnName": "styleId",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "tone",
+            "columnName": "tone",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "fontSet",
+            "columnName": "fontSet",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastOpenedAt",
+            "columnName": "lastOpenedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_drafts_ownerUserId",
+            "unique": false,
+            "columnNames": [
+              "ownerUserId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_drafts_ownerUserId` ON `${TABLE_NAME}` (`ownerUserId`)"
+          },
+          {
+            "name": "index_drafts_updatedAt",
+            "unique": false,
+            "columnNames": [
+              "updatedAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_drafts_updatedAt` ON `${TABLE_NAME}` (`updatedAt`)"
+          }
+        ],
+        "foreignKeys": []
+      },
+      {
+        "tableName": "draft_photos",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `draftId` TEXT NOT NULL, `uriString` TEXT NOT NULL, `displayName` TEXT, `mimeType` TEXT, `sizeBytes` INTEGER, `width` INTEGER, `height` INTEGER, `position` INTEGER NOT NULL, `isValid` INTEGER NOT NULL, `validationMessage` TEXT, PRIMARY KEY(`id`), FOREIGN KEY(`draftId`) REFERENCES `drafts`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "draftId",
+            "columnName": "draftId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "uriString",
+            "columnName": "uriString",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "displayName",
+            "columnName": "displayName",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "mimeType",
+            "columnName": "mimeType",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "sizeBytes",
+            "columnName": "sizeBytes",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "width",
+            "columnName": "width",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "height",
+            "columnName": "height",
+            "affinity": "INTEGER",
+            "notNull": false
+          },
+          {
+            "fieldPath": "position",
+            "columnName": "position",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isValid",
+            "columnName": "isValid",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "validationMessage",
+            "columnName": "validationMessage",
+            "affinity": "TEXT",
+            "notNull": false
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_draft_photos_draftId",
+            "unique": false,
+            "columnNames": [
+              "draftId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_draft_photos_draftId` ON `${TABLE_NAME}` (`draftId`)"
+          },
+          {
+            "name": "index_draft_photos_position",
+            "unique": false,
+            "columnNames": [
+              "position"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_draft_photos_position` ON `${TABLE_NAME}` (`position`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "drafts",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "draftId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "album_pages",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `draftId` TEXT NOT NULL, `position` INTEGER NOT NULL, `layoutId` TEXT NOT NULL, `caption` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`draftId`) REFERENCES `drafts`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "draftId",
+            "columnName": "draftId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "position",
+            "columnName": "position",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "layoutId",
+            "columnName": "layoutId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "caption",
+            "columnName": "caption",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_album_pages_draftId",
+            "unique": false,
+            "columnNames": [
+              "draftId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_album_pages_draftId` ON `${TABLE_NAME}` (`draftId`)"
+          },
+          {
+            "name": "index_album_pages_position",
+            "unique": false,
+            "columnNames": [
+              "position"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_album_pages_position` ON `${TABLE_NAME}` (`position`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "drafts",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "draftId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "album_slots",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `pageId` TEXT NOT NULL, `slotKey` TEXT NOT NULL, `photoId` TEXT, `remotePhotoId` TEXT, `caption` TEXT NOT NULL, `cropScale` REAL NOT NULL, `cropOffsetX` REAL NOT NULL, `cropOffsetY` REAL NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`pageId`) REFERENCES `album_pages`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`photoId`) REFERENCES `draft_photos`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pageId",
+            "columnName": "pageId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "slotKey",
+            "columnName": "slotKey",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "photoId",
+            "columnName": "photoId",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "remotePhotoId",
+            "columnName": "remotePhotoId",
+            "affinity": "TEXT",
+            "notNull": false
+          },
+          {
+            "fieldPath": "caption",
+            "columnName": "caption",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cropScale",
+            "columnName": "cropScale",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cropOffsetX",
+            "columnName": "cropOffsetX",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cropOffsetY",
+            "columnName": "cropOffsetY",
+            "affinity": "REAL",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_album_slots_pageId",
+            "unique": false,
+            "columnNames": [
+              "pageId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_album_slots_pageId` ON `${TABLE_NAME}` (`pageId`)"
+          },
+          {
+            "name": "index_album_slots_photoId",
+            "unique": false,
+            "columnNames": [
+              "photoId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_album_slots_photoId` ON `${TABLE_NAME}` (`photoId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "album_pages",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "pageId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          },
+          {
+            "table": "draft_photos",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "photoId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "album_stickers",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `pageId` TEXT NOT NULL, `sticker` TEXT NOT NULL, `x` REAL NOT NULL, `y` REAL NOT NULL, `scale` REAL NOT NULL, `rotation` REAL NOT NULL, `zIndex` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`pageId`) REFERENCES `album_pages`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pageId",
+            "columnName": "pageId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sticker",
+            "columnName": "sticker",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "x",
+            "columnName": "x",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "y",
+            "columnName": "y",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "scale",
+            "columnName": "scale",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rotation",
+            "columnName": "rotation",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "zIndex",
+            "columnName": "zIndex",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_album_stickers_pageId",
+            "unique": false,
+            "columnNames": [
+              "pageId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_album_stickers_pageId` ON `${TABLE_NAME}` (`pageId`)"
+          },
+          {
+            "name": "index_album_stickers_zIndex",
+            "unique": false,
+            "columnNames": [
+              "zIndex"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_album_stickers_zIndex` ON `${TABLE_NAME}` (`zIndex`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "album_pages",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "pageId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      }
+    ],
+    "views": [],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '18e09f2e56668cfc835bc5b7f802069a')"
+    ]
+  }
+}

@@ -16,7 +16,7 @@ import com.example.myapplication.data.album.AlbumDao
         AlbumStickerEntity::class
     ],
     version = 6,
-    exportSchema = false
+    exportSchema = true
 )
 abstract class DraftDatabase : RoomDatabase() {
     abstract fun draftDao(): DraftDao
