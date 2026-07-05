@@ -24,6 +24,7 @@ data class AlbumPageEntity(
     val draftId: String,
     val position: Int,
     val layoutId: String,
+    val caption: String = "",
     val createdAt: Long,
     val updatedAt: Long
 )
@@ -51,6 +52,7 @@ data class AlbumSlotEntity(
     val pageId: String,
     val slotKey: String,
     val photoId: String?,
+    val remotePhotoId: String?,
     val caption: String,
     val cropScale: Float,
     val cropOffsetX: Float,

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import coil.ImageLoader
 import com.example.myapplication.data.auth.AuthApi
 import com.example.myapplication.data.auth.AuthInterceptor
 import com.example.myapplication.data.auth.AuthRepository
@@ -19,9 +20,12 @@ import com.example.myapplication.data.books.TemplatesApi
 import com.example.myapplication.data.draft.DraftDatabase
 import com.example.myapplication.data.draft.DraftRepository
 import com.example.myapplication.data.media.AndroidMediaMetadataReader
+import com.example.myapplication.data.media.PhotoLocalStorage
 import com.example.myapplication.data.media.PhotoImportService
 import com.example.myapplication.data.media.PhotoValidator
 import com.example.myapplication.data.pdf.AndroidPdfExporter
+import java.io.File
+import java.util.concurrent.TimeUnit
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -37,7 +41,12 @@ class AppContainer(
     }
 
     private val baseOkHttpClient: OkHttpClient by lazy {
-        OkHttpClient.Builder().build()
+        OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(120, TimeUnit.SECONDS)
+            .readTimeout(120, TimeUnit.SECONDS)
+            .callTimeout(180, TimeUnit.SECONDS)
+            .build()
     }
 
     private val authApi: AuthApi by lazy {
@@ -55,6 +64,12 @@ class AppContainer(
         baseOkHttpClient.newBuilder()
             .addInterceptor(AuthInterceptor(sessionStore))
             .authenticator(TokenAuthenticator(authRepository))
+            .build()
+    }
+
+    val imageLoader: ImageLoader by lazy {
+        ImageLoader.Builder(appContext)
+            .okHttpClient(authorizedOkHttpClient)
             .build()
     }
 
@@ -80,13 +95,16 @@ class AppContainer(
 
     private val draftDatabase: DraftDatabase by lazy {
         Room.databaseBuilder(appContext, DraftDatabase::class.java, "keepmoments.db")
-            .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
+            .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
             .fallbackToDestructiveMigration()
             .build()
     }
 
     val draftRepository: DraftRepository by lazy {
-        DraftRepository(draftDatabase.draftDao())
+        DraftRepository(
+            draftDao = draftDatabase.draftDao(),
+            photoLocalStorage = photoLocalStorage
+        )
     }
 
     val albumRepository: AlbumRepository by lazy {
@@ -108,10 +126,18 @@ class AppContainer(
         PhotoValidator()
     }
 
+    private val photoLocalStorage: PhotoLocalStorage by lazy {
+        PhotoLocalStorage(
+            contentResolver = appContext.contentResolver,
+            storageDir = File(appContext.filesDir, "imported_photos")
+        )
+    }
+
     val photoImportService: PhotoImportService by lazy {
         PhotoImportService(
             mediaMetadataReader = mediaMetadataReader,
-            photoValidator = photoValidator
+            photoValidator = photoValidator,
+            photoLocalStorage = photoLocalStorage
         )
     }
 
@@ -200,6 +226,18 @@ class AppContainer(
         val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE drafts ADD COLUMN generateCaptions INTEGER NOT NULL DEFAULT 1")
+            }
+        }
+
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE album_slots ADD COLUMN remotePhotoId TEXT")
+            }
+        }
+
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE album_pages ADD COLUMN caption TEXT NOT NULL DEFAULT ''")
             }
         }
     }
