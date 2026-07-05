@@ -1,8 +1,15 @@
 # KeepMoments
 
-App for automatically creating photo album from your photos
+Приложение для автоматической сборки фотоальбомов из пользовательских фотографий:
+пользователь выбирает снимки и задаёт описание, приложение формирует
+структурированный альбом и экспортирует его в PDF.
 
 > [!CAUTION]
 > This is only MVP
 
-> 
+## Компоненты
+
+- [`mobile/`](mobile/README.md) — Android-клиент (Kotlin/Compose): экраны, работа с
+  фото, тесты и QA-документация
+- `backend/` — Go-бэкенд (REST API)
+- `ml/` — Python ML-сервис (обработка фотографий)
