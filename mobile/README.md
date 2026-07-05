@@ -42,3 +42,12 @@ Unit-тесты (`src/test`) запускаются без эмулятора, �
 
 Общие хелперы — в `src/test/.../testutil/`, фикстуры — в
 `src/test/resources/fixtures/`.
+
+## QA-документация
+
+Ручное тестирование и тест-дизайн — в `docs/qa/`:
+
+- [Тест-план](docs/qa/test-plan.md)
+- [Тест-кейсы](docs/qa/test-cases.md)
+- [Смоук-чек-лист](docs/qa/checklist-smoke.md)
+- [Баг-репорты](docs/qa/bug-reports.md)
