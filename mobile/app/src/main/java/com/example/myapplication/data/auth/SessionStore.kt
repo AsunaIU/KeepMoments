@@ -15,15 +15,22 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 
+interface SessionStore {
+    val session: Flow<AuthSession?>
+    suspend fun save(response: AuthResponse)
+    suspend fun clear()
+    suspend fun getSession(): AuthSession?
+}
+
 private val Context.sessionDataStore: DataStore<Preferences> by preferencesDataStore(name = "auth_session")
 
-class SessionStore(
+class DataStoreSessionStore(
     context: Context
-) {
+) : SessionStore {
 
     private val dataStore = context.sessionDataStore
 
-    val session: Flow<AuthSession?> = dataStore.data
+    override val session: Flow<AuthSession?> = dataStore.data
         .catch { exception ->
             if (exception is IOException) {
                 emit(emptyPreferences())
@@ -51,7 +58,7 @@ class SessionStore(
             }
         }
 
-    suspend fun save(response: AuthResponse) {
+    override suspend fun save(response: AuthResponse) {
         dataStore.edit { preferences ->
             preferences[Keys.ACCESS_TOKEN] = response.accessToken
             preferences[Keys.REFRESH_TOKEN] = response.refreshToken
@@ -63,11 +70,11 @@ class SessionStore(
         }
     }
 
-    suspend fun clear() {
+    override suspend fun clear() {
         dataStore.edit { it.clear() }
     }
 
-    suspend fun getSession(): AuthSession? = session.firstOrNull()
+    override suspend fun getSession(): AuthSession? = session.firstOrNull()
 
     private object Keys {
         val ACCESS_TOKEN = stringPreferencesKey("access_token")
