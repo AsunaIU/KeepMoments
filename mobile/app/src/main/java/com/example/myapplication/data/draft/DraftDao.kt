@@ -41,6 +41,9 @@ interface DraftDao {
     @Query("SELECT COUNT(*) FROM draft_photos WHERE draftId = :draftId")
     suspend fun countPhotos(draftId: String): Int
 
+    @Query("SELECT uriString FROM draft_photos")
+    suspend fun getAllPhotoUriStrings(): List<String>
+
     @Query("UPDATE drafts SET updatedAt = :timestamp, lastOpenedAt = :timestamp WHERE id = :draftId")
     suspend fun touchDraft(draftId: String, timestamp: Long)
 

@@ -13,6 +13,7 @@ import com.example.myapplication.data.draft.DraftRepository
 import com.example.myapplication.data.media.PhotoImportService
 import com.example.myapplication.model.DraftOwnerType
 import com.example.myapplication.model.SelectedPhoto
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -130,7 +131,11 @@ class DraftEditorViewModel(
     )
 
     fun onAddMorePhotos(uris: List<Uri>) {
+        if (_isGeneratingBook.value) return
+
         viewModelScope.launch {
+            if (_isGeneratingBook.value) return@launch
+
             val currentDraft = draftFlow.value ?: return@launch
             val existingUris = currentDraft.selectedPhotos.map { it.uriString }.toHashSet()
             val uniqueIncoming = uris
@@ -148,13 +153,15 @@ class DraftEditorViewModel(
 
             _isProcessing.value = true
             _errorMessage.value = null
+            var newPhotos = emptyList<SelectedPhoto>()
             runCatching {
-                val newPhotos = photoImportService.createSelectedPhotos(selectedToAdd)
+                newPhotos = photoImportService.createSelectedPhotos(selectedToAdd)
                 draftRepository.addPhotos(draftId = draftId, photos = newPhotos)
                 if (uniqueIncoming.size > selectedToAdd.size) {
                     _errorMessage.value = "Можно выбрать максимум $PHOTO_LIMIT фото"
                 }
             }.onFailure { throwable ->
+                photoImportService.deleteLocalCopies(newPhotos)
                 _errorMessage.value = throwable.localizedMessage ?: "Не удалось добавить фотографии"
             }
             _isProcessing.value = false
@@ -162,7 +169,11 @@ class DraftEditorViewModel(
     }
 
     fun onRemovePhoto(photoId: String) {
+        if (_isGeneratingBook.value) return
+
         viewModelScope.launch {
+            if (_isGeneratingBook.value) return@launch
+
             draftRepository.removePhoto(draftId = draftId, photoId = photoId)
         }
     }
@@ -177,6 +188,8 @@ class DraftEditorViewModel(
     }
 
     fun onContinueClicked() {
+        if (_isGeneratingBook.value) return
+
         val currentDraft = draftFlow.value
         Log.d(TAG, "continue clicked draftId=$draftId")
         if (currentDraft?.selectedPhotos?.any(SelectedPhoto::isValid) != true) {
@@ -193,25 +206,26 @@ class DraftEditorViewModel(
             return
         }
 
+        _isGeneratingBook.value = true
+        _errorMessage.value = null
         viewModelScope.launch {
             Log.d(TAG, "continue generating book draftId=$draftId")
-            _isGeneratingBook.value = true
-            _errorMessage.value = null
-            draftRepository.updateDraftStoryPrompt(
-                draftId = draftId,
-                storyPrompt = currentDraft.storyPrompt
-            )
-            val result = booksRepository.generateRenderedBook(currentDraft)
-            _isGeneratingBook.value = false
-
-            result.onSuccess { book ->
+            try {
+                draftRepository.updateDraftStoryPrompt(
+                    draftId = draftId,
+                    storyPrompt = currentDraft.storyPrompt
+                )
+                val book = booksRepository.generateRenderedBook(currentDraft).getOrThrow()
                 renderedBookStore.save(draftId = draftId, book = book)
                 albumRepository.createInitialAlbumFromRenderedBook(book)
                 Log.d(TAG, "continue success draftId=$draftId navigate rendered")
                 _generatedBookDraftId.value = draftId
-            }.onFailure { throwable ->
+            } catch (throwable: Throwable) {
+                if (throwable is CancellationException) throw throwable
                 Log.e(TAG, "continue failed draftId=$draftId: ${throwable.message}", throwable)
                 _errorMessage.value = throwable.localizedMessage ?: "Не удалось собрать книгу"
+            } finally {
+                _isGeneratingBook.value = false
             }
         }
     }

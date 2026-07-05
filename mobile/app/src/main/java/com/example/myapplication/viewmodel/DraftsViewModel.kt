@@ -9,6 +9,7 @@ import com.example.myapplication.data.draft.DraftRepository
 import com.example.myapplication.data.media.PhotoImportService
 import com.example.myapplication.model.BookDraftSummary
 import com.example.myapplication.model.DraftOwnerType
+import com.example.myapplication.model.SelectedPhoto
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -62,6 +63,12 @@ class DraftsViewModel(
         initialValue = DraftsUiState()
     )
 
+    init {
+        viewModelScope.launch {
+            draftRepository.cleanupOrphanedLocalPhotos()
+        }
+    }
+
     suspend fun createDraftFromUris(
         uris: List<Uri>,
         storyPrompt: String? = null,
@@ -69,12 +76,13 @@ class DraftsViewModel(
     ): String? {
         if (uris.isEmpty()) return null
 
+        var importedPhotos = emptyList<SelectedPhoto>()
         return runCatching {
             _isCreating.value = true
             _errorMessage.value = null
 
             val session = authRepository.currentSession()
-            val importedPhotos = photoImportService.createSelectedPhotos(uris.take(PHOTO_LIMIT))
+            importedPhotos = photoImportService.createSelectedPhotos(uris.take(PHOTO_LIMIT))
             if (importedPhotos.isEmpty()) {
                 null
             } else {
@@ -87,6 +95,7 @@ class DraftsViewModel(
                 )
             }
         }.onFailure { throwable ->
+            photoImportService.deleteLocalCopies(importedPhotos)
             _errorMessage.value = throwable.localizedMessage ?: "Не удалось создать черновик"
         }.also {
             _isCreating.value = false
